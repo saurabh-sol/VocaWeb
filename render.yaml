@@ -1,0 +1,60 @@
+# Render Blueprint — Vocaweb API (Fastify monorepo)
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: theo-api
+    runtime: node
+    region: oregon
+    plan: starter
+    branch: main
+    buildCommand: >-
+      corepack enable &&
+      corepack prepare pnpm@10.12.1 --activate &&
+      pnpm install --frozen-lockfile --prod=false
+    startCommand: >-
+      corepack enable &&
+      pnpm --filter @theo/api exec tsx src/server.ts
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: COREPACK_ENABLE_STRICT
+        value: "0"
+      - key: DATABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_PRIVY_APP_ID
+        sync: false
+      - key: PRIVY_APP_SECRET
+        sync: false
+      - key: CODEX_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTIGRAVITY_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: INTEGRATIONS_CALLBACK_BASE
+        sync: false
+      - key: INTEGRATION_TOKEN_SECRET
+        sync: false
+      - key: INTEGRATIONS_MCP_ENABLED
+        value: "true"
+      - key: NOTION_CLIENT_ID
+        sync: false
+      - key: NOTION_CLIENT_SECRET
+        sync: false
+      - key: CANVA_CLIENT_ID
+        sync: false
+      - key: CANVA_CLIENT_SECRET
+        sync: false
+      - key: FIGMA_CLIENT_ID
+        sync: false
+      - key: FIGMA_CLIENT_SECRET
+        sync: false
+      - key: CANVA_MCP_CLIENT_ID_URL
+        sync: false

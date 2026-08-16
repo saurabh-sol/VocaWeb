@@ -1,0 +1,30 @@
+{
+  "name": "theo",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "db:migrate": "turbo db:migrate",
+    "clean": "turbo clean",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.5.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "unrs-resolver",
+      "msgpackr-extract"
+    ]
+  },
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

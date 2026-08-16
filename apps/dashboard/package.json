@@ -1,0 +1,37 @@
+{
+  "name": "@theo/dashboard",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "WATCHPACK_POLLING=true next dev --port 3002",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next"
+  },
+  "dependencies": {
+    "@privy-io/react-auth": "^3.33.1",
+    "@webcontainer/api": "^1.6.4",
+    "framer-motion": "^12.0.0",
+    "lucide-react": "^0.500.0",
+    "next": "15.5.20",
+    "next-themes": "^0.4.6",
+    "prism-react-renderer": "^2.4.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "15.5.20",
+    "postcss": "^8.5.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.0"
+  }
+}

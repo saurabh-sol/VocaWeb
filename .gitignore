@@ -1,0 +1,33 @@
+node_modules/
+dist/
+.next/
+.turbo/
+*.tsbuildinfo
+
+.env
+.env.local
+.env.*.local
+
+data/transcripts/
+
+.DS_Store
+*.log
+coverage/
+.vercel
+.cursor/
+
+# MCP integration packs (separate repos, not watched by Next.js)
+MCP-Canva/
+MCP-Figma/
+MCP-Notion/
+*.mov
+
+# SDK folders (local only — never commit to GitHub)
+Drooper_sdk_python/
+Drooper_sdk_typescript/
+Vocaweb_sdk_python/
+Vocaweb_sdk_typescript/
+drooper_sdk_python/
+drooper_sdk_typescript/
+vocaweb_sdk_python/
+vocaweb_sdk_typescript/

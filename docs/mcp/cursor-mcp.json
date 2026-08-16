@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "notion": {
+      "url": "https://mcp.notion.com/mcp"
+    },
+    "figma": {
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "canva": {
+      "url": "https://mcp.canva.com/mcp"
+    }
+  }
+}
