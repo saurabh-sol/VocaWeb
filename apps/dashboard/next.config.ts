@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import path from 'path';
 
 const crossOriginIsolationHeaders = [
   { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
@@ -6,6 +7,7 @@ const crossOriginIsolationHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   webpack: (config, { webpack }) => {
     config.watchOptions = {
       ...config.watchOptions,
