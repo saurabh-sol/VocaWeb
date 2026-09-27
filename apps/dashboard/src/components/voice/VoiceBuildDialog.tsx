@@ -6,6 +6,9 @@ import { Mic, Square, Loader2, Send } from 'lucide-react';
 import { useVoice } from './VoiceProvider';
 import { VoiceMessageBubble } from './VoiceMessageBubble';
 import { ModelSelector } from '@/components/shared/ModelSelector';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/feedback';
+import { Notice } from '@/components/ui/tag';
 
 export function VoiceBuildDialog() {
   const {
@@ -46,7 +49,7 @@ export function VoiceBuildDialog() {
       if (!canUseMic) return;
       await startRecording();
     } catch (err) {
-      console.error('[Vocaweb] Mic error:', err);
+      console.error('[VocaWeb] Mic error:', err);
     }
   };
 
@@ -55,7 +58,7 @@ export function VoiceBuildDialog() {
     try {
       await sendVoiceTurn();
     } catch (err) {
-      console.error('[Vocaweb] Send error:', err);
+      console.error('[VocaWeb] Send error:', err);
     }
   };
 
@@ -63,7 +66,7 @@ export function VoiceBuildDialog() {
     try {
       await disconnect();
     } catch (err) {
-      console.error('[Vocaweb] End session error:', err);
+      console.error('[VocaWeb] End session error:', err);
     }
   };
 
@@ -78,72 +81,67 @@ export function VoiceBuildDialog() {
 
   const canSend = isRecording && (hasCapturedAudio || !!partialUserText.trim());
 
+  const statusLabel = isBuilding
+    ? 'Building your website'
+    : isRecording
+      ? 'Recording. Press Stop and send when you are done'
+      : isProcessing
+        ? 'Processing your message'
+        : isSpeaking || !canUseMic
+          ? 'VocaWeb is answering, wait to speak'
+          : isConnected
+            ? 'Connected. Press the mic when you are ready'
+            : 'Press the mic to connect';
+
   return (
-    <div className="relative flex flex-col h-full rounded-2xl border border-[var(--border)]/30 bg-[var(--card)]/10 backdrop-blur-md shadow-2xl overflow-hidden">
+    <div className="vw-card relative flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="relative z-30 flex items-center justify-between px-6 py-4 border-b border-[var(--border)]/30 bg-transparent max-md:px-3 max-md:py-3">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="relative z-30 flex items-center justify-between gap-3 border-b-[1.5px] border-rule px-5 py-3.5 max-md:px-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="relative shrink-0">
-            <div className="h-10 w-10 rounded-full bg-[var(--primary)] flex items-center justify-center">
-              <Mic className="h-5 w-5 text-[var(--primary-foreground)]" />
-            </div>
+            <span className="grid h-10 w-10 place-items-center rounded-lg border-[1.5px] border-rule bg-ink text-paper">
+              <Mic className="h-5 w-5" aria-hidden />
+            </span>
             {isRecording && (
-              <motion.div
-                className="absolute inset-0 rounded-full bg-[var(--primary)]"
-                animate={{ scale: [1, 1.4], opacity: [0.5, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
+              <motion.span
+                aria-hidden
+                className="absolute inset-0 rounded-lg border-[1.5px] border-bad"
+                animate={{ scale: [1, 1.45], opacity: [0.7, 0] }}
+                transition={{ duration: 1.4, repeat: Infinity }}
               />
             )}
           </div>
           <div className="min-w-0">
-            <h2 className="font-semibold text-[var(--foreground)]">Vocaweb Voice</h2>
-            <p className="text-xs text-[var(--muted-foreground)] max-md:truncate">
-              {isBuilding
-                ? 'Building your website...'
-                : isRecording
-                  ? 'Recording... click Stop when done'
-                  : isProcessing
-                    ? 'Processing your message...'
-                    : isSpeaking || !canUseMic
-                      ? 'Vocaweb is responding... wait to speak'
-                      : isConnected
-                        ? 'Connected — click mic when ready to speak'
-                        : 'Click mic to connect'}
+            <h2 className="text-[16px] font-semibold leading-tight">VocaWeb Voice</h2>
+            <p className="truncate font-mono text-[11.5px] text-dim" role="status">
+              {statusLabel}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           <ModelSelector />
           {(isConnected || transcript.length > 0) && (
-            <button
-              type="button"
-              onClick={() => void handleEndSession()}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors"
-            >
-              <Square className="w-3 h-3" />
-              End Session
-            </button>
+            <Button size="sm" onClick={() => void handleEndSession()}>
+              <Square className="h-3 w-3" aria-hidden />
+              End session
+            </Button>
           )}
         </div>
       </div>
 
-      {/* Messages Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 max-md:px-3">
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5 max-md:px-3">
         {!hasMessages && (
-          <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-12">
-            <div className="h-16 w-16 rounded-full bg-[var(--muted)] flex items-center justify-center">
-              <Mic className="h-7 w-7 text-[var(--muted-foreground)]" />
-            </div>
-            <div>
-              <p className="text-lg font-medium text-[var(--foreground)] mb-1">
-                Tell Vocaweb what to build
-              </p>
-              <p className="text-sm text-[var(--muted-foreground)] max-w-md">
-                Describe your website out loud. When you&apos;re done speaking, click Stop &amp; Send
-                — Vocaweb will respond after that.
-              </p>
-            </div>
+          <div className="flex h-full items-center justify-center py-6">
+            <EmptyState
+              icon={<Mic className="h-6 w-6" aria-hidden />}
+              title="Tell VocaWeb what to build"
+              className="w-full max-w-[520px] border-0 bg-transparent"
+            >
+              Describe your website out loud. When you finish speaking, press Stop and send, and
+              VocaWeb answers.
+            </EmptyState>
           </div>
         )}
 
@@ -191,69 +189,65 @@ export function VoiceBuildDialog() {
 
       {/* Building overlay */}
       {isBuilding && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[var(--background)]/80 backdrop-blur-sm">
-          <Loader2 className="w-10 h-10 text-[var(--primary)] animate-spin mb-4" />
-          <p className="text-sm font-medium text-[var(--foreground)]">Building your website</p>
-          <p className="text-xs text-[var(--muted-foreground)] mt-1">
-            Live preview opening...
-          </p>
+        <div
+          role="status"
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--vw-paper)_88%,transparent)]"
+        >
+          <Loader2 className="mb-4 h-10 w-10 animate-spin" aria-hidden />
+          <p className="font-display text-[17px] font-semibold">Building your website</p>
+          <p className="mt-1 font-mono text-[11.5px] text-dim">The live preview opens next</p>
         </div>
       )}
 
-      {/* Bottom Controls */}
-      <div className="border-t border-[var(--border)]/30 bg-transparent px-6 py-4 max-md:px-3">
+      {/* Controls */}
+      <div className="border-t-[1.5px] border-rule px-5 py-4 max-md:px-3">
         <AnimatePresence>
           {micError && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
-              className="mb-3 px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs text-center"
+              className="mb-4"
             >
-              {micError}
+              <Notice tone="bad" role="alert" className="text-center text-[12.5px]">
+                {micError}
+              </Notice>
             </motion.div>
           )}
         </AnimatePresence>
 
         <div className="flex items-center justify-center gap-4">
           {!isRecording && (
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+            <Button
+              variant="primary"
               onClick={handleStartMic}
               disabled={isBuilding || isRecording || (!canUseMic && isConnected)}
-              className={`relative p-4 rounded-full shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--primary)] text-[var(--primary-foreground)] hover:shadow-xl`}
+              aria-label={isConnected ? 'Start recording' : 'Connect the microphone'}
+              className="!h-14 !w-14 !rounded-full !p-0"
             >
-              <Mic className="w-6 h-6" />
-            </motion.button>
+              <Mic className="h-6 w-6" aria-hidden />
+            </Button>
           )}
 
           {isRecording && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: canSend ? 1.05 : 1 }}
-              whileTap={{ scale: canSend ? 0.95 : 1 }}
+            <Button
               onClick={handleStopAndSend}
               disabled={!canSend || isBuilding}
-              className="flex items-center gap-2 px-6 py-3 rounded-full shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed bg-red-500 text-white hover:shadow-xl"
+              size="lg"
+              className="!rounded-full !border-bad !bg-bad !text-paper"
             >
-              <Send className="w-5 h-5" />
-              <span className="text-sm font-semibold">Stop &amp; Send</span>
-            </motion.button>
+              <Send className="h-5 w-5" aria-hidden />
+              Stop and send
+            </Button>
           )}
         </div>
 
         {(isRecording || (!canUseMic && isConnected && !isBuilding)) && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-xs text-center text-[var(--muted-foreground)] mt-2"
-          >
+          <p className="mt-3 text-center text-xs text-dim">
             {isRecording
-              ? 'Speak as long as you need — click Stop & Send when finished'
-              : 'Wait for Vocaweb to finish — then click mic to speak'}
-          </motion.p>
+              ? 'Speak as long as you need, then press Stop and send'
+              : 'Wait for VocaWeb to finish, then press the mic to speak'}
+          </p>
         )}
       </div>
     </div>

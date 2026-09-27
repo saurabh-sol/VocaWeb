@@ -46,7 +46,7 @@ export function VoiceButton() {
       if (!canUseMic) return;
       await startRecording();
     } catch (err) {
-      console.error('[Vocaweb] VoiceButton mic error:', err);
+      console.error('[VocaWeb] VoiceButton mic error:', err);
     }
   };
 

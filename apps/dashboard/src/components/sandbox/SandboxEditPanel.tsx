@@ -3,6 +3,8 @@
 import { useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Send, MousePointer2, X, Crosshair } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { SelectedElementInfo } from '@/lib/vocaweb-inspect-bridge';
 
 export interface SandboxChatMessage {
@@ -68,71 +70,74 @@ export function SandboxEditPanel({
   };
 
   return (
-    <div className="flex flex-col h-full border-l border-[var(--border)]/30 bg-[#0d0d0d]/95">
+    <div className="flex h-full w-full flex-col bg-paper">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--border)]/30">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-[var(--foreground)]">Edit with AI</span>
-        </div>
+      <div className="flex items-center justify-between border-b-[1.5px] border-rule px-3 py-2.5">
+        <span className="vw-kicker text-ink">Edit with AI</span>
         <button
           type="button"
           onClick={onToggleInspect}
           disabled={disabled}
-          title={inspectMode ? 'Exit select mode' : 'Select element in preview'}
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-medium transition-colors disabled:opacity-40 ${
+          aria-pressed={inspectMode}
+          title={inspectMode ? 'Stop selecting' : 'Select an element in the preview'}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md border-[1.5px] px-2 py-1 text-[11px] font-semibold transition-colors disabled:opacity-40',
             inspectMode
-              ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
-              : 'border border-[var(--border)]/40 text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-          }`}
+              ? 'border-brand bg-brand text-brand-ink'
+              : 'border-rule text-ink hover:bg-wash',
+          )}
         >
-          {inspectMode ? <Crosshair className="w-3 h-3" /> : <MousePointer2 className="w-3 h-3" />}
-          {inspectMode ? 'Selecting…' : 'Select'}
+          {inspectMode ? (
+            <Crosshair className="h-3 w-3" aria-hidden />
+          ) : (
+            <MousePointer2 className="h-3 w-3" aria-hidden />
+          )}
+          {inspectMode ? 'Selecting' : 'Select'}
         </button>
       </div>
 
       {/* Selected element */}
-      <div className="px-3 py-2.5 border-b border-[var(--border)]/20">
+      <div className="border-b-[1.5px] border-dashed border-soft px-3 py-2.5">
         {selectedElement ? (
-          <div className="rounded-lg border border-[var(--primary)]/30 bg-[var(--primary)]/5 px-2.5 py-2">
+          <div className="rounded-lg border-[1.5px] border-dashed border-brand px-2.5 py-2">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-wider text-[var(--primary)] mb-0.5">
-                  Selected
-                </p>
-                <p className="text-xs font-mono text-[var(--foreground)] truncate">
+                <p className="vw-kicker mb-0.5 text-[10px] text-brand">Selected</p>
+                <p className="truncate font-mono text-xs">
                   &lt;{selectedElement.tagName}&gt;
                   {selectedElement.className
                     ? `.${selectedElement.className.split(/\s+/).slice(0, 2).join('.')}`
                     : ''}
                 </p>
                 {selectedElement.text && (
-                  <p className="text-[11px] text-[var(--muted-foreground)] mt-1 line-clamp-2">
-                    “{selectedElement.text}”
+                  <p className="mt-1 line-clamp-2 text-[11.5px] text-dim">
+                    {selectedElement.text}
                   </p>
                 )}
               </div>
               <button
                 type="button"
                 onClick={onClearSelection}
-                className="p-0.5 rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                aria-label="Clear selection"
+                className="rounded p-0.5 text-dim hover:bg-wash hover:text-ink"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="h-3.5 w-3.5" aria-hidden />
               </button>
             </div>
           </div>
         ) : (
-          <p className="text-[11px] text-[var(--muted-foreground)] leading-relaxed">
-            Click <strong className="text-[var(--foreground)]">Select</strong>, then click any
-            element in the Live preview to target your edit.
+          <p className="text-[11.5px] leading-relaxed text-dim">
+            Press <strong className="text-ink">Select</strong>, then click any element in the
+            preview to aim your edit at it.
           </p>
         )}
       </div>
 
-      {/* Chat thread */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
+      {/* Thread */}
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
         {messages.length === 0 && !editStatus && (
-          <p className="text-[11px] text-[var(--muted-foreground)] text-center py-6">
-            Describe a change — AI will update your site and refresh the preview.
+          <p className="py-6 text-center text-[11.5px] text-dim">
+            Describe a change. VocaWeb updates the site and refreshes the preview.
           </p>
         )}
         <AnimatePresence initial={false}>
@@ -141,28 +146,27 @@ export function SandboxEditPanel({
               key={i}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`text-xs leading-relaxed rounded-lg px-2.5 py-2 ${
+              className={cn(
+                'rounded-lg border-[1.5px] px-2.5 py-2 text-xs leading-relaxed',
                 msg.role === 'user'
-                  ? 'bg-[var(--muted)]/40 text-[var(--foreground)] ml-2'
-                  : 'bg-[var(--primary)]/10 text-[var(--foreground)] mr-2'
-              }`}
+                  ? 'ml-4 border-rule bg-ink text-paper'
+                  : 'mr-4 border-soft bg-wash',
+              )}
             >
               {msg.text}
             </motion.div>
           ))}
         </AnimatePresence>
         {editStatus && (
-          <div className="flex items-center gap-2 text-[11px] text-[var(--muted-foreground)] px-1">
-            {isLoading ? (
-              <Loader2 className="w-3 h-3 animate-spin text-[var(--primary)] shrink-0" />
-            ) : null}
+          <div className="flex items-center gap-2 px-1 font-mono text-[11px] text-dim" role="status">
+            {isLoading ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden /> : null}
             <span>{editStatus}</span>
           </div>
         )}
       </div>
 
-      {/* Input area */}
-      <div className="border-t border-[var(--border)]/30 p-3 space-y-2">
+      {/* Composer */}
+      <div className="space-y-2 border-t-[1.5px] border-rule p-3">
         <div className="flex flex-wrap gap-1">
           {QUICK_PROMPTS.map((chip) => (
             <button
@@ -170,14 +174,18 @@ export function SandboxEditPanel({
               type="button"
               onClick={() => appendPrompt(chip)}
               disabled={disabled || isLoading}
-              className="px-1.5 py-0.5 rounded text-[10px] font-medium border border-[var(--border)]/40 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)]/40 transition-colors disabled:opacity-40"
+              className="rounded border border-soft px-1.5 py-0.5 font-mono text-[10.5px] text-dim transition-colors hover:border-rule hover:text-ink disabled:opacity-40"
             >
               {chip}
             </button>
           ))}
         </div>
         <div className="relative">
+          <label htmlFor="sandbox-edit-input" className="sr-only">
+            Edit instructions
+          </label>
           <textarea
+            id="sandbox-edit-input"
             ref={textareaRef}
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
@@ -186,27 +194,27 @@ export function SandboxEditPanel({
             rows={3}
             placeholder={
               selectedElement
-                ? `Change this ${selectedElement.tagName}…`
-                : 'Add instructions for your site…'
+                ? `Change this ${selectedElement.tagName}`
+                : 'Describe a change to your site'
             }
-            className="w-full resize-none rounded-lg border border-[var(--border)]/40 bg-[var(--muted)]/30 px-3 py-2 pr-10 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] disabled:opacity-50"
+            className="vw-input resize-none pr-11 text-[12.5px]"
           />
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="icon"
             onClick={onSubmit}
             disabled={disabled || isLoading || !input.trim()}
-            className="absolute bottom-2 right-2 p-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] disabled:opacity-40 transition-opacity"
+            aria-label="Apply the edit"
+            className="absolute bottom-2.5 right-2 !h-7 !w-7 !shadow-none"
           >
             {isLoading ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
             ) : (
-              <Send className="w-3.5 h-3.5" />
+              <Send className="h-3.5 w-3.5" aria-hidden />
             )}
-          </button>
+          </Button>
         </div>
-        <p className="text-[10px] text-[var(--muted-foreground)]">
-          Enter to apply · Shift+Enter for new line
-        </p>
+        <p className="font-mono text-[10.5px] text-faint">Enter to apply, Shift+Enter for a new line</p>
       </div>
     </div>
   );

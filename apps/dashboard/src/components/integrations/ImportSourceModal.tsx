@@ -1,10 +1,14 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader2, Link2, Check, Layers, Search, RefreshCw } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { X, Link2, Check, Layers, Search, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/feedback';
+import { Notice, Tag } from '@/components/ui/tag';
+import { APP_SETTINGS } from '@/lib/routes';
+import { cn } from '@/lib/utils';
+import { useAuthSession } from '@/lib/auth';
 import type { ImportSource, ImportBundle, IntegrationProvider } from '@/lib/shared-types';
 import {
   connectIntegration,
@@ -48,8 +52,7 @@ export function ImportSourceModal({
   buildImmediately?: boolean;
   defaultUseMcp?: boolean;
 }) {
-  const { getAccessToken, authenticated: isSignedIn } = usePrivy();
-  const getToken = useCallback(async () => await getAccessToken(), [getAccessToken]);
+  const { getToken, isSignedIn } = useAuthSession();
   
   const [integrations, setIntegrations] = useState<IntegrationStatus[]>([]);
   const [integrationsLoaded, setIntegrationsLoaded] = useState(false);
@@ -152,7 +155,7 @@ export function ImportSourceModal({
     const url = await connectIntegration(
       provider,
       getToken,
-      `${window.location.origin}/settings`,
+      `${window.location.origin}${APP_SETTINGS}`,
     );
     if (url) window.location.href = url;
   };
@@ -212,266 +215,293 @@ export function ImportSourceModal({
     }
   };
 
-  if (!open) return null;
-
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <button
-          type="button"
-          className="absolute inset-0 bg-black/50"
-          onClick={onClose}
-          aria-label="Close"
-        />
+      {open && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.96 }}
-          className="relative w-full max-w-2xl max-h-[85vh] overflow-hidden rounded-2xl border border-[var(--border)]/40 bg-[var(--card)] shadow-2xl flex flex-col"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
         >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]/30">
-            <div className="flex items-center gap-2">
-              <Layers className="w-5 h-5 text-[var(--primary)]" />
-              <h2 className="text-lg font-semibold">Import from sources</h2>
-            </div>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-[var(--muted)]/40">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {!isSignedIn ? (
-            <div className="p-8 text-center text-[var(--muted-foreground)]">
-              Sign in to connect Notion, Canva, or Figma.
-            </div>
-          ) : (
-            <>
-              <div className="flex gap-2 px-5 pt-4 border-b border-[var(--border)]/20 pb-3">
-                {(['notion', 'canva', 'figma'] as IntegrationProvider[]).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setActiveProvider(p)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                      activeProvider === p
-                        ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
-                        : 'bg-[var(--muted)]/40 text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-                    }`}
-                  >
-                    {PROVIDER_LABELS[p]}
-                  </button>
-                ))}
+          <button
+            type="button"
+            tabIndex={-1}
+            className="absolute inset-0 cursor-default bg-[var(--overlay)]"
+            onClick={onClose}
+            aria-label="Close"
+          />
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-title"
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            className="relative flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[10px] border-[1.5px] border-rule bg-paper shadow-hard-lg"
+          >
+            <div className="flex items-center justify-between border-b-[1.5px] border-rule px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <Layers className="h-5 w-5" aria-hidden />
+                <h2 id="import-title" className="text-lg font-semibold">
+                  Import from sources
+                </h2>
               </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="rounded-md p-2 text-dim transition-colors hover:bg-wash hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-              <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                <p className="text-sm text-[var(--muted-foreground)]">{PROVIDER_DESC[activeProvider]}</p>
-
-                {!integrationsLoaded ? (
-                  <div className="flex justify-center py-6">
-                    <Loader2 className="w-5 h-5 animate-spin text-[var(--primary)]" />
-                  </div>
-                ) : !activeIntegration?.configured ? (
-                  <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-2">
-                    <p className="text-sm text-amber-200">
-                      {PROVIDER_LABELS[activeProvider]} is not configured on the API server yet.
-                    </p>
-                    <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-                      Add {activeProvider.toUpperCase()}_CLIENT_ID and {activeProvider.toUpperCase()}_CLIENT_SECRET
-                      to your API environment (see .env.example), restart the API, then return here to connect.
-                    </p>
-                    <Link
-                      href="/docs/integrations"
-                      className="inline-block text-xs text-[var(--primary)] hover:underline"
+            {!isSignedIn ? (
+              <p className="p-8 text-center text-dim">
+                Sign in to connect Notion, Canva or Figma.
+              </p>
+            ) : (
+              <>
+                <div
+                  role="tablist"
+                  aria-label="Source"
+                  className="flex gap-1 border-b-[1.5px] border-dashed border-soft px-5 py-3"
+                >
+                  {(['notion', 'canva', 'figma'] as IntegrationProvider[]).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeProvider === p}
+                      data-active={activeProvider === p}
+                      onClick={() => setActiveProvider(p)}
+                      className="vw-navlink !h-8 !text-[13px]"
                     >
-                      Integrations setup guide →
-                    </Link>
-                  </div>
-                ) : !activeIntegration.connected ? (
-                  <button
-                    onClick={() => void handleConnect(activeProvider)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium"
-                  >
-                    <Link2 className="w-4 h-4" />
-                    Connect {PROVIDER_LABELS[activeProvider]}
-                  </button>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-xs text-green-400 flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Connected
-                      </span>
-                      <div className="flex items-center gap-3">
-                        {activeProvider === 'notion' && (
-                          <button
-                            onClick={() => void handleConnect('notion')}
-                            className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1"
-                          >
-                            <RefreshCw className="w-3 h-3" />
-                            Update page access
-                          </button>
-                        )}
-                        <button
-                          onClick={() => void disconnectIntegration(activeProvider, getToken).then(loadIntegrations)}
-                          className="text-xs text-[var(--muted-foreground)] hover:text-red-400"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    </div>
+                      {PROVIDER_LABELS[p]}
+                    </button>
+                  ))}
+                </div>
 
-                    {activeProvider === 'notion' && (
-                      <div className="rounded-xl border border-[var(--border)]/30 bg-[var(--muted)]/10 p-3 space-y-3">
-                        <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
-                          Notion only shows pages you shared with Vocaweb. To import Team HQ, Projects, Docs, etc.,
-                          add them in Notion → page ⋯ → <strong>Connections</strong> → your integration, or click{' '}
-                          <strong>Update page access</strong> above.
-                        </p>
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--muted-foreground)]" />
+                <div className="flex-1 space-y-4 overflow-y-auto p-5">
+                  <p className="text-sm text-dim">{PROVIDER_DESC[activeProvider]}</p>
+
+                  {!integrationsLoaded ? (
+                    <div className="grid gap-2" aria-busy="true">
+                      <Skeleton className="h-11 w-full" />
+                      <Skeleton className="h-11 w-full" />
+                      <Skeleton className="h-11 w-2/3" />
+                    </div>
+                  ) : !activeIntegration?.configured ? (
+                    <Notice tone="warn" className="space-y-1.5">
+                      <p className="font-semibold">
+                        {PROVIDER_LABELS[activeProvider]} is not set up on the server yet.
+                      </p>
+                      <p className="text-[12.5px] text-dim">
+                        Add {activeProvider.toUpperCase()}_CLIENT_ID and{' '}
+                        {activeProvider.toUpperCase()}_CLIENT_SECRET to the API environment, restart
+                        the API, then come back here to connect.
+                      </p>
+                    </Notice>
+                  ) : !activeIntegration.connected ? (
+                    <Button variant="primary" onClick={() => void handleConnect(activeProvider)}>
+                      <Link2 className="h-4 w-4" aria-hidden />
+                      Connect {PROVIDER_LABELS[activeProvider]}
+                    </Button>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Tag tone="ok">
+                          <Check className="h-3 w-3" aria-hidden /> Connected
+                        </Tag>
+                        <div className="flex items-center gap-4">
+                          {activeProvider === 'notion' && (
+                            <button
+                              type="button"
+                              onClick={() => void handleConnect('notion')}
+                              className="flex items-center gap-1 text-xs font-semibold text-brand hover:underline"
+                            >
+                              <RefreshCw className="h-3 w-3" aria-hidden />
+                              Update page access
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void disconnectIntegration(activeProvider, getToken).then(
+                                loadIntegrations,
+                              )
+                            }
+                            className="text-xs font-semibold text-dim hover:text-bad"
+                          >
+                            Disconnect
+                          </button>
+                        </div>
+                      </div>
+
+                      {activeProvider === 'notion' && (
+                        <div className="vw-card-soft space-y-3 p-3">
+                          <p className="text-[12.5px] leading-relaxed text-dim">
+                            Notion only shows pages you shared with VocaWeb. To add more, open the
+                            page in Notion, choose <strong>Connections</strong> and add your
+                            integration, or use <strong>Update page access</strong> above.
+                          </p>
+                          <div className="relative">
+                            <Search
+                              className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-dim"
+                              aria-hidden
+                            />
                             <input
                               value={notionSearch}
                               onChange={(e) => {
                                 setNotionSearch(e.target.value);
                                 setNotionUrl('');
                               }}
-                              placeholder="Search shared pages..."
-                              className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)]/50 text-sm"
+                              aria-label="Search shared Notion pages"
+                              placeholder="Search shared pages"
+                              className="vw-input pl-9"
                             />
                           </div>
+                          <div className="flex gap-2">
+                            <input
+                              value={notionUrl}
+                              onChange={(e) => {
+                                setNotionUrl(e.target.value);
+                                setNotionSearch('');
+                              }}
+                              aria-label="Notion page URL"
+                              placeholder="Or paste a Notion page URL"
+                              className="vw-input flex-1"
+                            />
+                            <Button size="sm" onClick={() => void loadResources()}>
+                              Load page
+                            </Button>
+                          </div>
                         </div>
+                      )}
+
+                      {activeProvider === 'figma' && (
                         <div className="flex gap-2">
                           <input
-                            value={notionUrl}
-                            onChange={(e) => {
-                              setNotionUrl(e.target.value);
-                              setNotionSearch('');
-                            }}
-                            placeholder="Or paste a Notion page URL..."
-                            className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)]/50 text-sm"
+                            value={figmaUrl}
+                            onChange={(e) => setFigmaUrl(e.target.value)}
+                            aria-label="Figma file URL"
+                            placeholder="Paste a Figma file URL"
+                            className="vw-input flex-1"
                           />
-                          <button
-                            onClick={() => void loadResources()}
-                            className="px-3 py-2 rounded-lg bg-[var(--muted)]/50 text-sm whitespace-nowrap"
-                          >
-                            Load page
-                          </button>
+                          <Button size="sm" onClick={() => void loadResources()}>
+                            Load
+                          </Button>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {activeProvider === 'figma' && (
-                      <div className="flex gap-2">
-                        <input
-                          value={figmaUrl}
-                          onChange={(e) => setFigmaUrl(e.target.value)}
-                          placeholder="Paste Figma file URL..."
-                          className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)]/50 text-sm"
-                        />
-                        <button
-                          onClick={() => void loadResources()}
-                          className="px-3 py-2 rounded-lg bg-[var(--muted)]/50 text-sm"
-                        >
-                          Load
-                        </button>
-                      </div>
-                    )}
+                      {hint && <p className="text-xs text-dim">{hint}</p>}
 
-                    {hint && <p className="text-xs text-[var(--muted-foreground)]">{hint}</p>}
-
-                    {resourceLoading ? (
-                      <div className="flex justify-center py-8">
-                        <Loader2 className="w-5 h-5 animate-spin text-[var(--primary)]" />
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {resources.map((r) => {
-                          const key = `${activeProvider}:${r.id}`;
-                          const isSelected = selected.some((s) => s.key === key);
-                          return (
-                            <button
-                              key={r.id}
-                              onClick={() => toggleResource(r)}
-                              className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-colors ${
-                                isSelected
-                                  ? 'border-[var(--primary)] bg-[var(--primary)]/10'
-                                  : 'border-[var(--border)]/30 hover:bg-[var(--muted)]/20'
-                              }`}
-                            >
-                              <div
-                                className={`w-4 h-4 rounded border flex items-center justify-center ${
-                                  isSelected ? 'bg-[var(--primary)] border-[var(--primary)]' : 'border-[var(--border)]'
-                                }`}
+                      {resourceLoading ? (
+                        <div className="grid gap-2" aria-busy="true">
+                          <Skeleton className="h-11 w-full" />
+                          <Skeleton className="h-11 w-full" />
+                          <Skeleton className="h-11 w-full" />
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {resources.map((r) => {
+                            const key = `${activeProvider}:${r.id}`;
+                            const isSelected = selected.some((s) => s.key === key);
+                            return (
+                              <button
+                                key={r.id}
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() => toggleResource(r)}
+                                className={cn(
+                                  'flex w-full items-center gap-3 rounded-lg border-[1.5px] p-3 text-left transition-[border-color,box-shadow,background-color]',
+                                  isSelected
+                                    ? 'border-rule bg-wash shadow-hard-sm'
+                                    : 'border-soft hover:border-rule',
+                                )}
                               >
-                                {isSelected && <Check className="w-3 h-3 text-[var(--primary-foreground)]" />}
-                              </div>
-                              <span className="text-sm font-medium truncate">{r.title}</span>
-                            </button>
-                          );
-                        })}
-                        {resources.length === 0 && activeProvider !== 'figma' && (
-                          <div className="text-sm text-[var(--muted-foreground)] py-4 text-center space-y-2">
-                            <p>No shared pages found.</p>
-                            {activeProvider === 'notion' && (
-                              <p className="text-xs">
-                                Open a page in Notion → ⋯ → Connections → add Vocaweb, then click Update page access.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
+                                <span
+                                  className={cn(
+                                    'grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border-[1.5px]',
+                                    isSelected ? 'border-ink bg-ink text-paper' : 'border-soft',
+                                  )}
+                                >
+                                  {isSelected && (
+                                    <Check className="h-2.5 w-2.5" strokeWidth={3.5} aria-hidden />
+                                  )}
+                                </span>
+                                <span className="truncate text-sm font-medium">{r.title}</span>
+                              </button>
+                            );
+                          })}
+                          {resources.length === 0 && activeProvider !== 'figma' && (
+                            <div className="space-y-2 py-4 text-center text-sm text-dim">
+                              <p>No shared pages found.</p>
+                              {activeProvider === 'notion' && (
+                                <p className="text-xs">
+                                  Share a page with VocaWeb in Notion, then use Update page access.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
 
-                {selected.length > 0 && (
-                  <div className="rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/5 p-3">
-                    <p className="text-xs font-medium text-[var(--primary)] mb-2">
-                      Import stack ({selected.length} selected)
-                    </p>
-                    <ul className="text-xs text-[var(--muted-foreground)] space-y-1">
-                      {selected.map((s) => (
-                        <li key={s.key}>
-                          {PROVIDER_LABELS[s.provider]}: {s.title ?? s.externalId}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                  {selected.length > 0 && (
+                    <div className="vw-card-soft border-dashed p-3">
+                      <p className="vw-kicker mb-2 text-ink">{selected.length} selected</p>
+                      <ul className="space-y-1 text-xs text-dim">
+                        {selected.map((s) => (
+                          <li key={s.key}>
+                            {PROVIDER_LABELS[s.provider]}: {s.title ?? s.externalId}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
-                {error && <p className="text-sm text-red-400">{error}</p>}
+                  {error && (
+                    <Notice tone="bad" role="alert">
+                      {error}
+                    </Notice>
+                  )}
 
-                {anyMcpReady && (
-                  <label className="flex items-center gap-2 rounded-lg border border-[var(--border)]/30 p-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useMcp}
-                      onChange={(e) => setUseMcp(e.target.checked)}
-                      className="rounded border-[var(--border)]"
-                    />
-                    <span className="text-sm">Use MCP for richer context</span>
-                  </label>
-                )}
-              </div>
+                  {anyMcpReady && (
+                    <label className="vw-card-soft flex cursor-pointer items-center gap-2.5 p-3">
+                      <input
+                        type="checkbox"
+                        checked={useMcp}
+                        onChange={(e) => setUseMcp(e.target.checked)}
+                        className="h-4 w-4 accent-[var(--vw-brand)]"
+                      />
+                      <span className="text-sm">Use MCP for richer context</span>
+                    </label>
+                  )}
+                </div>
 
-              <div className="flex gap-2 justify-end px-5 py-4 border-t border-[var(--border)]/30">
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-lg text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)]/40"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => void handleImport()}
-                  disabled={loading || selected.length === 0}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium disabled:opacity-50"
-                >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {buildImmediately ? 'Import & Build' : 'Import to plan'}
-                </button>
-              </div>
-            </>
-          )}
+                <div className="flex justify-end gap-2 border-t-[1.5px] border-rule px-5 py-4">
+                  <Button variant="ghost" onClick={onClose}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => void handleImport()}
+                    disabled={selected.length === 0}
+                    loading={loading}
+                  >
+                    {buildImmediately ? 'Import and build' : 'Import to plan'}
+                  </Button>
+                </div>
+              </>
+            )}
+          </motion.div>
         </motion.div>
-      </div>
+      )}
     </AnimatePresence>
   );
 }

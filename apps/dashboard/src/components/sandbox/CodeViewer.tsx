@@ -49,48 +49,45 @@ export function CodeViewer({ filePath, content }: CodeViewerProps) {
 
   if (!filePath) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center gap-3">
-        <FileCode className="w-10 h-10 text-[var(--muted-foreground)]/50" />
-        <p className="text-sm text-[var(--muted-foreground)]">
-          Select a file to view its code
-        </p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+        <FileCode className="h-10 w-10 text-faint" aria-hidden />
+        <p className="text-sm text-dim">Select a file to read its code</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border)]/30">
-        <div className="flex items-center gap-2">
-          <FileCode className="w-3.5 h-3.5 text-[var(--muted-foreground)]" />
-          <span className="text-xs font-medium text-[var(--foreground)] truncate max-w-[300px]">
-            {filePath}
-          </span>
-          <span className="text-[10px] text-[var(--muted-foreground)]">
-            {lineCount} lines
-          </span>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b-[1.5px] border-dashed border-soft px-4 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileCode className="h-3.5 w-3.5 shrink-0 text-dim" aria-hidden />
+          <span className="max-w-[300px] truncate font-mono text-xs font-medium">{filePath}</span>
+          <span className="shrink-0 font-mono text-[10.5px] text-dim">{lineCount} lines</span>
         </div>
         <button
+          type="button"
           onClick={handleCopy}
-          className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors"
-          title="Copy code"
+          aria-label="Copy the code"
+          title="Copy the code"
+          className="rounded-md p-1.5 text-dim transition-colors hover:bg-wash hover:text-ink"
         >
           {copied ? (
-            <Check className="w-3.5 h-3.5 text-green-400" />
+            <Check className="h-3.5 w-3.5 text-ok" aria-hidden />
           ) : (
-            <Copy className="w-3.5 h-3.5" />
+            <Copy className="h-3.5 w-3.5" aria-hidden />
           )}
         </button>
       </div>
-      <div className="flex-1 overflow-auto text-[13px] leading-5">
+      {/* Code keeps a dark surface in both themes so syntax colours stay readable. */}
+      <div className="flex-1 overflow-auto bg-[var(--vw-code-bg)] font-mono text-[13px] leading-5 text-[var(--vw-code-ink)]">
         <Highlight theme={themes.nightOwl} code={content} language={language}>
           {({ tokens, getLineProps, getTokenProps }) => (
-            <pre className="p-4 min-w-fit">
+            <pre className="min-w-fit p-4">
               {tokens.map((line, i) => {
                 const lineProps = getLineProps({ line });
                 return (
                   <div key={i} {...lineProps} className="table-row">
-                    <span className="table-cell pr-4 text-right select-none text-[var(--muted-foreground)]/40 text-[11px] w-[3ch]">
+                    <span className="table-cell w-[3ch] select-none pr-4 text-right text-[11px] opacity-35">
                       {i + 1}
                     </span>
                     <span className="table-cell">

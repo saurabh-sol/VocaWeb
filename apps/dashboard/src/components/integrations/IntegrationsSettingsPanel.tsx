@@ -1,9 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAuthSession } from '@/lib/auth';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { Link2, Check, Loader2, Layers, ExternalLink, BookOpen } from 'lucide-react';
+import { siFigma, siNotion } from 'simple-icons';
+import { Link2, Check, Download } from 'lucide-react';
+import { BrandIcon } from '@/components/ui/brand';
+import { Button } from '@/components/ui/button';
+import { CardHeader } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/feedback';
+import { Tag } from '@/components/ui/tag';
+import { APP_SETTINGS } from '@/lib/routes';
 import type { IntegrationProvider } from '@/lib/shared-types';
 import {
   connectIntegration,
@@ -24,15 +32,32 @@ const LABELS: Record<IntegrationProvider, string> = {
 
 const DESCRIPTIONS: Record<IntegrationProvider, string> = {
   notion: 'Import page content and structure as your site copy.',
-  canva: 'Export designs as PNG/HTML assets for your site.',
-  figma: 'Extract layout, colors, and fonts from Figma files.',
+  canva: 'Export designs as image assets for your site.',
+  figma: 'Extract layout, colours and fonts from Figma files.',
 };
+
+function ProviderLogo({ provider }: { provider: IntegrationProvider }) {
+  return (
+    <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border-[1.5px] border-rule bg-white text-[#101010]">
+      {provider === 'notion' && <BrandIcon icon={siNotion} size={20} />}
+      {provider === 'figma' && <BrandIcon icon={siFigma} size={19} colored />}
+      {provider === 'canva' && (
+        <Image
+          src="/integrations/canva-logo.png"
+          alt=""
+          width={40}
+          height={40}
+          className="h-full w-full scale-125 object-contain"
+        />
+      )}
+    </span>
+  );
+}
 
 const MCP_STORAGE_KEY = 'vocaweb:mcp-enrichment';
 
 export function IntegrationsSettingsPanel() {
-  const { getAccessToken, authenticated: isSignedIn } = usePrivy();
-  const getToken = useCallback(async () => await getAccessToken(), [getAccessToken]);
+  const { getToken, isSignedIn } = useAuthSession();
   const [integrations, setIntegrations] = useState<IntegrationStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [importOpen, setImportOpen] = useState(false);
@@ -86,61 +111,52 @@ export function IntegrationsSettingsPanel() {
   const getStatus = (p: IntegrationProvider) =>
     integrations.find((i) => i.provider === p);
 
+  const returnTo = () => `${window.location.origin}${APP_SETTINGS}`;
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-[var(--card)]/10 backdrop-blur-md border border-[var(--border)]/30 rounded-2xl p-6 shadow-sm space-y-6"
+      className="vw-card space-y-6 p-6"
     >
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Layers className="w-5 h-5 text-[var(--primary)]" />
-            Integrations
-          </h2>
-          <p className="text-sm text-[var(--muted-foreground)] mt-1">
-            Connect Notion, Canva, and Figma to import content and design into your builds.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <a
-            href="/docs/mcp/ide-setup"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--border)] text-sm font-medium hover:bg-[var(--muted)]/30"
-          >
-            <BookOpen className="w-4 h-4" />
-            IDE MCP setup
-          </a>
-          <button
+      <CardHeader
+        title="Integrations"
+        description="Connect Notion, Canva and Figma to bring content and design into your builds."
+        className="flex-wrap"
+        action={
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => setImportOpen(true)}
             disabled={!isSignedIn}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium disabled:opacity-50"
+            className="shrink-0"
           >
-            <ExternalLink className="w-4 h-4" />
+            <Download className="h-4 w-4" aria-hidden />
             Import to project
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      <label className="flex items-center gap-3 rounded-xl border border-[var(--border)]/30 p-4 bg-[var(--background)]/30 cursor-pointer">
+      <label className="vw-card-soft flex cursor-pointer items-start gap-3 p-4">
         <input
           type="checkbox"
           checked={mcpEnrichment}
           onChange={(e) => toggleMcpEnrichment(e.target.checked)}
-          className="rounded border-[var(--border)]"
+          className="mt-0.5 h-4 w-4 accent-[var(--vw-brand)]"
         />
-        <div>
-          <p className="text-sm font-medium">
-            Enable MCP enrichment by default
-          </p>
-          <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-            Use Model Context Protocol for richer import context when building from connected sources.
-          </p>
-        </div>
+        <span>
+          <span className="block text-sm font-semibold">Use MCP enrichment by default</span>
+          <span className="mt-0.5 block text-[12.5px] text-dim">
+            Model Context Protocol gives the build richer context from your connected sources.
+          </span>
+        </span>
       </label>
 
       {loading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="w-5 h-5 animate-spin text-[var(--primary)]" />
+        <div className="grid gap-4 sm:grid-cols-3" aria-busy="true">
+          {PROVIDERS.map((provider) => (
+            <Skeleton key={provider} className="h-[150px] w-full rounded-lg" />
+          ))}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-3">
@@ -152,71 +168,66 @@ export function IntegrationsSettingsPanel() {
             const mcpConnected = status?.mcpConnected ?? false;
 
             return (
-              <div
-                key={provider}
-                className="rounded-xl border border-[var(--border)]/30 p-4 space-y-3 bg-[var(--background)]/30"
-              >
-                <div>
-                  <p className="font-medium">{LABELS[provider]}</p>
-                  <p className="text-xs text-[var(--muted-foreground)] mt-1">{DESCRIPTIONS[provider]}</p>
+              <div key={provider} className="vw-card-soft flex flex-col gap-3 p-4">
+                <div className="flex items-center gap-3">
+                  <ProviderLogo provider={provider} />
+                  <p className="font-display text-[16px] font-semibold">{LABELS[provider]}</p>
                 </div>
+                <p className="text-[12.5px] text-dim">{DESCRIPTIONS[provider]}</p>
 
-                {!configured ? (
-                  <p className="text-xs text-amber-400">
-                    Not configured on API — add {provider.toUpperCase()}_CLIENT_ID and _CLIENT_SECRET (see .env.example)
-                  </p>
-                ) : connected ? (
-                  <div className="space-y-2">
-                    <span className="text-xs text-green-400 flex items-center gap-1">
-                      <Check className="w-3 h-3" /> REST connected
-                    </span>
-                    {mcpConfigured && (
-                      <span
-                        className={`text-xs flex items-center gap-1 ${
-                          mcpConnected ? 'text-green-400' : 'text-[var(--muted-foreground)]'
-                        }`}
-                      >
-                        MCP {mcpConnected ? 'connected' : provider === 'canva' ? 'not connected' : 'ready'}
-                      </span>
-                    )}
-                    {provider === 'canva' && mcpConfigured && !mcpConnected && (
+                <div className="mt-auto">
+                  {!configured ? (
+                    <p className="text-[12px] text-warn">
+                      Not set up on the server. Add {provider.toUpperCase()}_CLIENT_ID and
+                      _CLIENT_SECRET to the API environment.
+                    </p>
+                  ) : connected ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        <Tag tone="ok">
+                          <Check className="h-3 w-3" aria-hidden /> Connected
+                        </Tag>
+                        {mcpConfigured && (
+                          <Tag tone={mcpConnected ? 'ok' : 'neutral'}>
+                            MCP{' '}
+                            {mcpConnected ? 'on' : provider === 'canva' ? 'off' : 'ready'}
+                          </Tag>
+                        )}
+                      </div>
+                      {provider === 'canva' && mcpConfigured && !mcpConnected && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const url = await connectCanvaMcp(getToken, returnTo());
+                            if (url) window.location.href = url;
+                          }}
+                          className="block text-xs font-semibold text-brand hover:underline"
+                        >
+                          Connect Canva MCP
+                        </button>
+                      )}
                       <button
-                        onClick={async () => {
-                          const url = await connectCanvaMcp(
-                            getToken,
-                            `${window.location.origin}/settings`,
-                          );
-                          if (url) window.location.href = url;
-                        }}
-                        className="text-xs text-[var(--primary)] hover:underline"
+                        type="button"
+                        onClick={() => void disconnectIntegration(provider, getToken).then(load)}
+                        className="block text-xs font-semibold text-dim hover:text-bad"
                       >
-                        Connect Canva MCP
+                        Disconnect
                       </button>
-                    )}
-                    <button
-                      onClick={() => void disconnectIntegration(provider, getToken).then(load)}
-                      className="text-xs text-[var(--muted-foreground)] hover:text-red-400 block"
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      disabled={!isSignedIn}
+                      onClick={async () => {
+                        const url = await connectIntegration(provider, getToken, returnTo());
+                        if (url) window.location.href = url;
+                      }}
                     >
-                      Disconnect
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={async () => {
-                      const url = await connectIntegration(
-                        provider,
-                        getToken,
-                        `${window.location.origin}/settings`,
-                      );
-                      if (url) window.location.href = url;
-                    }}
-                    disabled={!isSignedIn}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border)] text-xs font-medium hover:bg-[var(--muted)]/30 disabled:opacity-50"
-                  >
-                    <Link2 className="w-3.5 h-3.5" />
-                    Connect
-                  </button>
-                )}
+                      <Link2 className="h-3.5 w-3.5" aria-hidden />
+                      Connect
+                    </Button>
+                  )}
+                </div>
               </div>
             );
           })}

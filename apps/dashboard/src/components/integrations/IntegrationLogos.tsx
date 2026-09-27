@@ -35,7 +35,7 @@ export function VocawebBeamNode({ className }: { className?: string }) {
     <BeamNode className={cn('size-14 border-[var(--primary)]/30 bg-[var(--primary)]/5 sm:size-16', className)}>
       <Image
         src="/vocaweb-icon.png"
-        alt="Vocaweb"
+        alt="VocaWeb"
         width={48}
         height={48}
         className="size-9 object-contain sm:size-10"

@@ -1,6 +1,10 @@
 import type { NextConfig } from 'next';
 import path from 'path';
 
+/**
+ * The in-browser sandbox (WebContainer) needs cross-origin isolation. It is scoped to the
+ * app so the landing and sign-in pages stay free to load third-party frames.
+ */
 const crossOriginIsolationHeaders = [
   { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
@@ -8,25 +12,17 @@ const crossOriginIsolationHeaders = [
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../../'),
-  webpack: (config, { webpack }) => {
+  webpack: (config) => {
     config.watchOptions = {
       ...config.watchOptions,
       ignored: ['**/node_modules/**', '**/.git/**'],
     };
-    config.plugins.push(
-      new webpack.NormalModuleReplacementPlugin(
-        /@solana-program\/(memo|token)/,
-        require.resolve('./src/lib/solana-shim.js'),
-      ),
-    );
     return config;
   },
   async headers() {
     return [
-      {
-        source: '/:path*',
-        headers: crossOriginIsolationHeaders,
-      },
+      { source: '/app', headers: crossOriginIsolationHeaders },
+      { source: '/app/:path*', headers: crossOriginIsolationHeaders },
     ];
   },
 };

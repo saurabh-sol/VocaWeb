@@ -9,7 +9,8 @@ export async function apiFetch(
   options: RequestInit = {},
   getToken?: GetTokenFn,
 ) {
-  const token = getToken ? await getToken({ skipCache: true }) : null;
+  // Clerk refreshes its short-lived session token on its own, so the cached one is always valid.
+  const token = getToken ? await getToken() : null;
 
   const headers = new Headers(options.headers);
   if (!headers.has('Content-Type') && options.body) {
@@ -23,6 +24,18 @@ export async function apiFetch(
     ...options,
     headers,
   });
+}
+
+/** Turns an API error body into a sentence a person can read. */
+export function describeApiError(
+  body: { error?: string; message?: string } | null | undefined,
+  fallback: string,
+): string {
+  if (!body) return fallback;
+  if (body.error === 'limit_reached' || body.error === 'access_denied') {
+    return body.message ?? fallback;
+  }
+  return body.error ?? body.message ?? fallback;
 }
 
 export { API_BASE };

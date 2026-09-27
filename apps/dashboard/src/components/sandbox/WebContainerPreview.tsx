@@ -17,6 +17,7 @@ import { useWebContainer, type WCStatus } from '@/hooks/useWebContainer';
 import type { SelectedElementInfo } from '@/lib/vocaweb-inspect-bridge';
 import { withInspectBridge } from '@/lib/vocaweb-inspect-bridge';
 import { isStaticHtmlProject, buildStaticPreviewHtml } from '@/lib/scaffold-template';
+import { Button } from '@/components/ui/button';
 
 interface WebContainerPreviewProps {
   files: Record<string, string>;
@@ -31,20 +32,20 @@ const STATUS_CONFIG: Record<
   WCStatus,
   { label: string; icon: typeof Loader2; animate?: boolean }
 > = {
-  idle: { label: 'Waiting for files...', icon: Loader2 },
-  booting: { label: 'Booting WebContainer...', icon: Loader2, animate: true },
+  idle: { label: 'Waiting for files', icon: Loader2 },
+  booting: { label: 'Starting the sandbox', icon: Loader2, animate: true },
   installing: {
-    label: 'Installing dependencies...',
+    label: 'Installing dependencies',
     icon: Loader2,
     animate: true,
   },
   starting: {
-    label: 'Starting dev server...',
+    label: 'Starting the dev server',
     icon: Loader2,
     animate: true,
   },
-  ready: { label: 'Live Preview', icon: CheckCircle2 },
-  error: { label: 'Error', icon: AlertCircle },
+  ready: { label: 'Live preview', icon: CheckCircle2 },
+  error: { label: 'Preview error', icon: AlertCircle },
 };
 
 export function WebContainerPreview({
@@ -166,39 +167,43 @@ export function WebContainerPreview({
   const StatusIcon = config.icon;
   const showIframe = previewUrl && (status === 'ready' || status === 'installing' || status === 'starting');
 
+  const iconButton =
+    'rounded-md p-1.5 text-dim transition-colors hover:bg-wash hover:text-ink';
+  const textButton =
+    'flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-dim transition-colors hover:bg-wash hover:text-ink disabled:opacity-50';
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-[var(--border)]/30 bg-[var(--card)]/5">
-        <div className="flex items-center gap-2 min-w-0">
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b-[1.5px] border-dashed border-soft px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-2" role="status">
           <StatusIcon
-            className={`w-3.5 h-3.5 shrink-0 ${
-              status === 'error'
-                ? 'text-red-400'
-                : status === 'ready'
-                  ? 'text-green-400'
-                  : 'text-[var(--primary)]'
+            aria-hidden
+            className={`h-3.5 w-3.5 shrink-0 ${
+              status === 'error' ? 'text-bad' : status === 'ready' ? 'text-ok' : 'text-dim'
             } ${config.animate ? 'animate-spin' : ''}`}
           />
-          <span className="text-xs font-medium text-[var(--muted-foreground)] truncate">
-            {config.label}
-          </span>
+          <span className="truncate font-mono text-[11.5px] text-dim">{config.label}</span>
         </div>
-        <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap justify-end">
+        <div className="flex flex-wrap items-center justify-end gap-0.5">
           {previewUrl && (
             <>
               <button
+                type="button"
                 onClick={handleRefreshPreview}
-                className="p-1 rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                title="Refresh preview"
+                className={iconButton}
+                aria-label="Refresh the preview"
+                title="Refresh the preview"
               >
-                <RefreshCw className="w-3 h-3" />
+                <RefreshCw className="h-3 w-3" aria-hidden />
               </button>
               <button
+                type="button"
                 onClick={() => window.open(previewUrl, '_blank')}
-                className="p-1 rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                title="Open in new tab"
+                className={iconButton}
+                aria-label="Open the preview in a new tab"
+                title="Open in a new tab"
               >
-                <ExternalLink className="w-3 h-3" />
+                <ExternalLink className="h-3 w-3" aria-hidden />
               </button>
             </>
           )}
@@ -206,85 +211,79 @@ export function WebContainerPreview({
             <>
               {onFixWithAgent && (
                 <button
+                  type="button"
                   onClick={() => void handleFixWithAgent()}
                   disabled={fixing}
-                  className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--primary)] hover:bg-[var(--primary)]/10 transition-colors disabled:opacity-50"
+                  className={`${textButton} !text-brand`}
                 >
-                  <Wrench className="w-3 h-3 shrink-0" />
-                  {fixing ? 'Fixing…' : 'Fix with Vocaweb'}
+                  <Wrench className="h-3 w-3 shrink-0" aria-hidden />
+                  {fixing ? 'Fixing' : 'Fix with VocaWeb'}
                 </button>
               )}
-              <button
-                onClick={handleRestart}
-                className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors"
-              >
-                <RefreshCw className="w-3 h-3" />
+              <button type="button" onClick={handleRestart} className={textButton}>
+                <RefreshCw className="h-3 w-3" aria-hidden />
                 Retry
               </button>
             </>
           )}
           <button
+            type="button"
             onClick={() => setShowLogs(!showLogs)}
-            className="flex items-center gap-1 px-2 py-1 rounded text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors"
-            title={showLogs ? 'Hide terminal' : 'Show terminal'}
+            aria-expanded={showLogs}
+            className={textButton}
+            title={showLogs ? 'Hide the terminal' : 'Show the terminal'}
           >
-            <Terminal className="w-3 h-3" />
+            <Terminal className="h-3 w-3" aria-hidden />
             {showLogs ? (
-              <ChevronDown className="w-3 h-3" />
+              <ChevronDown className="h-3 w-3" aria-hidden />
             ) : (
-              <ChevronUp className="w-3 h-3" />
+              <ChevronUp className="h-3 w-3" aria-hidden />
             )}
           </button>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 relative">
+      <div className="relative min-h-0 flex-1">
         {showIframe ? (
           <iframe
             ref={iframeRef}
             src={previewUrl}
-            title="Live Preview"
-            className={`w-full h-full border-0 bg-white ${inspectMode ? 'cursor-crosshair' : ''}`}
+            title="Live preview"
+            className={`h-full w-full border-0 bg-white ${inspectMode ? 'cursor-crosshair' : ''}`}
           />
         ) : status === 'error' ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 px-6">
-            <AlertCircle className="w-8 h-8 text-red-400" />
-            <p className="text-sm text-red-400 text-center max-w-md">{error}</p>
+          <div className="flex h-full flex-col items-center justify-center gap-4 px-6" role="alert">
+            <AlertCircle className="h-8 w-8 text-bad" aria-hidden />
+            <p className="max-w-md text-center text-sm text-bad">{error}</p>
             <div className="flex gap-2">
               {onFixWithAgent && (
-                <button
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={() => void handleFixWithAgent()}
-                  disabled={fixing}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-medium disabled:opacity-50"
+                  loading={fixing}
                 >
-                  <Wrench className="w-3.5 h-3.5" />
-                  {fixing ? 'Fixing…' : 'Fix with Vocaweb'}
-                </button>
+                  {!fixing && <Wrench className="h-3.5 w-3.5" aria-hidden />}
+                  {fixing ? 'Fixing' : 'Fix with VocaWeb'}
+                </Button>
               )}
-              <button
-                onClick={handleRestart}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--border)] text-xs font-medium"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Try Again
-              </button>
+              <Button size="sm" onClick={handleRestart}>
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                Try again
+              </Button>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-full border-2 border-[var(--primary)]/30 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-[var(--primary)] animate-spin" />
-              </div>
-            </div>
+          <div className="flex h-full flex-col items-center justify-center gap-4" role="status">
+            <span className="grid h-12 w-12 place-items-center rounded-[10px] border-[1.5px] border-rule bg-paper shadow-hard-sm">
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+            </span>
             <div className="text-center">
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                {config.label}
-              </p>
-              <p className="text-xs text-[var(--muted-foreground)] mt-1">
-                {status === 'booting' && 'Initializing browser runtime...'}
-                {status === 'installing' && 'This may take a moment...'}
-                {status === 'starting' && 'Almost there...'}
+              <p className="font-display text-[15px] font-semibold">{config.label}</p>
+              <p className="mt-1 font-mono text-[11.5px] text-dim">
+                {status === 'booting' && 'Preparing the browser runtime'}
+                {status === 'installing' && 'This can take a moment'}
+                {status === 'starting' && 'Almost there'}
               </p>
             </div>
           </div>
@@ -297,9 +296,10 @@ export function WebContainerPreview({
               animate={{ height: 160 }}
               exit={{ height: 0 }}
               transition={{ duration: 0.2 }}
-              className="absolute bottom-0 left-0 right-0 border-t border-[var(--border)]/30 bg-[#0a0a0a]/95 backdrop-blur-sm overflow-hidden"
+              className="absolute bottom-0 left-0 right-0 overflow-hidden border-t-[1.5px] border-rule bg-[var(--vw-code-bg)]"
             >
-              <div className="h-full overflow-y-auto p-2 font-mono text-[10px] leading-relaxed text-green-400/80">
+              <div className="h-full overflow-y-auto p-2.5 font-mono text-[10.5px] leading-relaxed text-[var(--vw-code-ink)]">
+                {logs.length === 0 && <p className="opacity-50">No output yet.</p>}
                 {logs.map((line, i) => (
                   <div key={i} className="whitespace-pre-wrap break-all">
                     {line}

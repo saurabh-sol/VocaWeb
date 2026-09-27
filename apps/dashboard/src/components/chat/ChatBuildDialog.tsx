@@ -7,20 +7,23 @@ import {
   Send,
   Loader2,
   RotateCcw,
-  ArrowLeft,
   Hammer,
-  ClipboardList,
   Rocket,
   Layers,
   Link2,
   Check,
   Settings,
+  MessageSquareText,
 } from 'lucide-react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/feedback';
+import { Tag } from '@/components/ui/tag';
+import { APP_SETTINGS } from '@/lib/routes';
 import { ConversationMessage } from '@/components/shared/ConversationMessage';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAuthSession } from '@/lib/auth';
 import { useAppStore, useHydrated, type ChatMessage, type ModelTier } from '@/store';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, describeApiError } from '@/lib/api';
 import { streamBuild } from '@/lib/stream-build';
 import { syncChatMessage, ensureSessionMessages, isDbSessionId } from '@/lib/conversations';
 import { ImportSourceModal } from '@/components/integrations/ImportSourceModal';
@@ -46,18 +49,16 @@ function PlanCard({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-      className="rounded-xl border border-[var(--primary)]/30 bg-[var(--primary)]/5 backdrop-blur-sm overflow-hidden"
+      className="overflow-hidden rounded-[10px] border-[1.5px] border-rule bg-paper text-ink shadow-hard"
     >
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--primary)]/20 bg-[var(--primary)]/10">
-        <ClipboardList className="w-4 h-4 text-[var(--primary)]" />
-        <span className="text-xs font-semibold uppercase tracking-widest text-[var(--primary)]">
-          Build Plan
-        </span>
+      <div className="flex items-center justify-between border-b-[1.5px] border-rule bg-wash px-4 py-2.5">
+        <span className="vw-kicker text-ink">Build plan</span>
+        <Tag tone="warn">Waiting for you</Tag>
       </div>
-      <div className="px-4 py-3 chat-markdown prose prose-sm prose-invert max-w-none">
+      <div className="chat-markdown px-4 py-3">
         <ReactMarkdown
           allowedElements={['p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'br', 'h3', 'h4']}
           unwrapDisallowed
@@ -65,24 +66,14 @@ function PlanCard({
           {plan}
         </ReactMarkdown>
       </div>
-      <div className="flex items-center gap-2 px-4 py-3 border-t border-[var(--primary)]/20 max-md:flex-col max-md:items-stretch">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={onConfirm}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50"
-        >
-          <Rocket className="w-3.5 h-3.5" />
-          Build This
-        </motion.button>
-        <button
-          onClick={onEdit}
-          disabled={isLoading}
-          className="px-4 py-2 rounded-lg border border-[var(--border)] text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors disabled:opacity-50"
-        >
-          Change Plan
-        </button>
+      <div className="flex items-center gap-2 border-t-[1.5px] border-dashed border-soft px-4 py-3 max-md:flex-col max-md:items-stretch">
+        <Button variant="primary" size="sm" onClick={onConfirm} disabled={isLoading}>
+          <Rocket className="h-3.5 w-3.5" aria-hidden />
+          Build this
+        </Button>
+        <Button size="sm" onClick={onEdit} disabled={isLoading}>
+          Change plan
+        </Button>
       </div>
     </motion.div>
   );
@@ -90,9 +81,7 @@ function PlanCard({
 
 export function ChatBuildDialog() {
   const hydrated = useHydrated();
-  const { getAccessToken, authenticated: isSignedIn, user } = usePrivy();
-  const getToken = useCallback(async () => await getAccessToken(), [getAccessToken]);
-  const walletAddress = user?.wallet?.address ?? null;
+  const { getToken, isSignedIn } = useAuthSession();
   const selectedModel = useAppStore((s) => s.selectedModel);
   
   const initialPrompt = useAppStore((s) => s.initialPrompt);
@@ -187,7 +176,6 @@ export function ChatBuildDialog() {
           getToken,
           initialFiles: currentFiles,
           model: selectedModel,
-          walletAddress,
           onFile: (_path, _content, files) => {
             mergeProjectFiles(files);
           },
@@ -217,7 +205,8 @@ export function ChatBuildDialog() {
             finishBuild();
             addChatMessage({
               role: 'assistant',
-              text: `Something went wrong: ${message}`,
+              // Full sentences from the server (such as the daily allowance) stand on their own.
+              text: /[.!?]$/.test(message) ? message : `Something went wrong: ${message}`,
             });
           },
         });
@@ -239,11 +228,11 @@ export function ChatBuildDialog() {
       mergeProjectFiles,
       finishBuild,
       dbChatSessionId,
+      currentProject,
       setDbChatSessionId,
       setAgentMode,
       setBuildPlan,
       selectedModel,
-      walletAddress,
     ],
   );
 
@@ -286,7 +275,6 @@ export function ChatBuildDialog() {
               sessionId: dbChatSessionId ?? undefined,
               projectId: currentProject ?? undefined,
               model: selectedModel,
-              walletAddress: walletAddress ?? undefined,
             }),
           },
           getToken,
@@ -294,10 +282,11 @@ export function ChatBuildDialog() {
 
         const data = await res.json();
 
-        if (res.status === 403 && data.error === 'access_denied') {
+        if (data.error === 'access_denied' || data.error === 'limit_reached') {
+          finishBuild();
           addChatMessage({
             role: 'assistant',
-            text: `Access denied: ${data.message}`,
+            text: describeApiError(data, 'That request could not be completed.'),
           });
           return;
         }
@@ -314,7 +303,7 @@ export function ChatBuildDialog() {
         }
 
         if (data.intent === 'generate_image') {
-          addChatMessage({ role: 'assistant', text: '🎨 Generating your image...' });
+          addChatMessage({ role: 'assistant', text: 'Generating your image...' });
           setIsLoading(true);
           try {
             const imgRes = await apiFetch('/ai/image', { method: 'POST', body: JSON.stringify({ prompt: data.reply }) }, getToken);
@@ -325,7 +314,10 @@ export function ChatBuildDialog() {
             if (imgData.imageUrl) {
               addChatMessage({ role: 'assistant', text: 'Here\'s your generated image:', images: [imgData.imageUrl] });
             } else {
-              addChatMessage({ role: 'assistant', text: `Image generation failed: ${imgData.error || 'Unknown error'}` });
+              addChatMessage({
+                role: 'assistant',
+                text: describeApiError(imgData, 'The image could not be generated.'),
+              });
             }
           } catch {
             addChatMessage({ role: 'assistant', text: 'Failed to generate image. Please try again.' });
@@ -334,6 +326,7 @@ export function ChatBuildDialog() {
         }
 
         if (data.error) {
+          finishBuild();
           addChatMessage({
             role: 'assistant',
             text: `Something went wrong: ${data.error}`,
@@ -392,13 +385,13 @@ export function ChatBuildDialog() {
       enterLiveBuild,
       buildPlan,
       runDirectBuild,
+      finishBuild,
       getToken,
       dbChatSessionId,
       setDbChatSessionId,
       linkActiveSessionToDb,
       currentProject,
       selectedModel,
-      walletAddress,
     ],
   );
 
@@ -451,89 +444,53 @@ export function ChatBuildDialog() {
     setBuildPlan(null);
   };
 
-  const modeLabel =
-    isBuilding
-      ? 'Building...'
-      : agentMode === 'planning'
-        ? 'Plan Mode'
-        : isLoading
-          ? 'Thinking...'
-          : 'AI Website Builder';
+  const modeLabel = isBuilding
+    ? 'Building your site'
+    : agentMode === 'planning'
+      ? 'Reviewing the plan'
+      : isLoading
+        ? 'Thinking'
+        : 'Ready when you are';
+
+  const connectedCount = integrations.filter((i) => i.connected).length;
 
   return (
-    <div className="flex flex-col h-full rounded-2xl border border-[var(--border)]/30 bg-[var(--card)]/10 backdrop-blur-md shadow-2xl overflow-hidden">
+    <div className="vw-card flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]/30 bg-transparent max-md:px-3 max-md:py-3">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          <Link
-            href="/"
-            className="p-2 rounded-full text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors shrink-0"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div className="h-10 w-10 rounded-full bg-[var(--primary)] flex items-center justify-center shrink-0">
-            {isBuilding ? (
-              <Hammer className="h-5 w-5 text-[var(--primary-foreground)] animate-pulse" />
-            ) : (
-              <Hammer className="h-5 w-5 text-[var(--primary-foreground)]" />
-            )}
-          </div>
+      <div className="flex items-center justify-between gap-3 border-b-[1.5px] border-rule px-5 py-3.5 max-md:px-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border-[1.5px] border-rule bg-ink text-paper">
+            <Hammer className={isBuilding ? 'h-5 w-5 animate-pulse' : 'h-5 w-5'} aria-hidden />
+          </span>
           <div className="min-w-0">
-            <h2 className="font-semibold text-[var(--foreground)]">Vocaweb</h2>
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-xs text-[var(--muted-foreground)]">{modeLabel}</p>
-              {agentMode === 'planning' && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-400 uppercase tracking-wider">
-                  Plan
-                </span>
-              )}
-              {isBuilding && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-500/20 text-green-400 uppercase tracking-wider">
-                  Build
-                </span>
-              )}
-            </div>
+            <h2 className="text-[16px] font-semibold leading-tight">VocaWeb</h2>
+            <p className="truncate font-mono text-[11.5px] text-dim" role="status">
+              {modeLabel}
+            </p>
           </div>
           <ModelSelector />
         </div>
 
         {chatHistory.length > 0 && (
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setImportOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors"
-            >
-              <Layers className="w-3 h-3" />
-              Import
-            </button>
-            <button
-              onClick={handleNewChat}
-              disabled={isLoading}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors disabled:opacity-50 shrink-0"
-            >
-              <RotateCcw className="w-3 h-3" />
-              New Chat
-            </button>
-          </div>
+          <Button size="sm" onClick={handleNewChat} disabled={isLoading} className="shrink-0">
+            <RotateCcw className="h-3 w-3" aria-hidden />
+            New chat
+          </Button>
         )}
       </div>
 
-      {/* Messages Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4 max-md:px-3">
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5 max-md:px-3">
         {chatHistory.length === 0 && !isLoading && (
-          <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-12">
-            <div className="h-16 w-16 rounded-full bg-[var(--muted)] flex items-center justify-center">
-              <Send className="h-7 w-7 text-[var(--muted-foreground)]" />
-            </div>
-            <div>
-              <p className="text-lg font-medium text-[var(--foreground)] mb-1">
-                Tell Vocaweb what to build
-              </p>
-              <p className="text-sm text-[var(--muted-foreground)] max-w-md">
-                Describe your website idea. I&apos;ll create a plan, and once you approve, I&apos;ll
-                build it for you.
-              </p>
-            </div>
+          <div className="flex h-full items-center justify-center py-6">
+            <EmptyState
+              icon={<MessageSquareText className="h-6 w-6" aria-hidden />}
+              title="Tell VocaWeb what to build"
+              className="w-full max-w-[520px] border-0 bg-transparent"
+            >
+              Describe your website idea. You get a plan first, and the build starts once you
+              approve it.
+            </EmptyState>
           </div>
         )}
 
@@ -543,7 +500,7 @@ export function ChatBuildDialog() {
               {chatHistory.map((msg, i) => (
                 <ConversationMessage key={`msg-${i}`} role={msg.role}>
                   {msg.role === 'assistant' ? (
-                    <div className="chat-markdown prose prose-sm prose-invert max-w-none">
+                    <div className="chat-markdown">
                       <ReactMarkdown
                         allowedElements={['p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'br', 'h3', 'h4']}
                         unwrapDisallowed
@@ -562,7 +519,7 @@ export function ChatBuildDialog() {
                           key={imgIdx}
                           src={src}
                           alt="Generated image"
-                          className="rounded-xl max-w-full w-full shadow-lg border border-[var(--border)]/30"
+                          className="w-full max-w-full rounded-lg border-[1.5px] border-rule"
                           style={{ maxHeight: '400px', objectFit: 'contain' }}
                         />
                       ))}
@@ -581,9 +538,9 @@ export function ChatBuildDialog() {
                   )}
 
                   {msg.filesGenerated && msg.filesGenerated > 0 && agentMode === 'chat' && (
-                    <p className="text-[10px] text-[var(--muted-foreground)] mt-1.5 opacity-80">
+                    <p className="mt-1.5 font-mono text-[10.5px] text-dim">
                       {msg.filesGenerated} files generated
-                      {msg.skillsUsed?.length ? ` · ${msg.skillsUsed.length} skills used` : ''}
+                      {msg.skillsUsed?.length ? `, ${msg.skillsUsed.length} skills used` : ''}
                     </p>
                   )}
                 </ConversationMessage>
@@ -592,9 +549,9 @@ export function ChatBuildDialog() {
 
             {isLoading && (
               <ConversationMessage role="assistant">
-                <div className="flex items-center gap-2 text-[var(--muted-foreground)]">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>{isBuilding ? 'Building your website...' : 'Thinking...'}</span>
+                <div className="flex items-center gap-2 text-dim">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  <span>{isBuilding ? 'Building your website' : 'Thinking'}</span>
                 </div>
               </ConversationMessage>
             )}
@@ -602,28 +559,27 @@ export function ChatBuildDialog() {
         )}
       </div>
 
-      {/* Connect Panel */}
+      {/* Connect panel */}
       <AnimatePresence>
         {showConnectPanel && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="border-t border-[var(--border)]/30 overflow-hidden"
+            className="overflow-hidden border-t-[1.5px] border-dashed border-soft"
           >
-            <div className="px-4 py-3 space-y-3">
+            <div className="space-y-3 px-4 py-3">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider">
-                  Connect Integrations
-                </p>
+                <p className="vw-kicker">Connect integrations</p>
                 <button
+                  type="button"
                   onClick={() => setShowConnectPanel(false)}
-                  className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                  className="text-xs font-semibold text-dim hover:text-ink"
                 >
                   Close
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-2 max-sm:grid-cols-1">
                 {(['notion', 'canva', 'figma'] as IntegrationProvider[]).map((provider) => {
                   const status = integrations.find((i) => i.provider === provider);
                   const connected = status?.connected ?? false;
@@ -632,22 +588,19 @@ export function ChatBuildDialog() {
                   const mcpConfigured = status?.mcpConfigured ?? false;
 
                   return (
-                    <div
-                      key={provider}
-                      className="rounded-xl border border-[var(--border)]/30 p-3 space-y-2 bg-[var(--background)]/30"
-                    >
-                      <p className="text-xs font-medium capitalize">{provider}</p>
+                    <div key={provider} className="vw-card-soft space-y-2 p-3">
+                      <p className="text-xs font-semibold capitalize">{provider}</p>
                       {!configured ? (
-                        <p className="text-[10px] text-amber-400">Not configured</p>
+                        <p className="text-[11px] text-warn">Not configured</p>
                       ) : connected ? (
                         <div className="space-y-1">
-                          <span className="text-[10px] text-green-400 flex items-center gap-1">
-                            <Check className="w-2.5 h-2.5" /> REST
+                          <span className="flex items-center gap-1 text-[11px] text-ok">
+                            <Check className="h-2.5 w-2.5" aria-hidden /> Connected
                           </span>
                           {mcpConfigured && (
                             <span
-                              className={`text-[10px] flex items-center gap-1 ${
-                                mcpConnected ? 'text-green-400' : 'text-[var(--muted-foreground)]'
+                              className={`flex items-center gap-1 text-[11px] ${
+                                mcpConnected ? 'text-ok' : 'text-dim'
                               }`}
                             >
                               MCP {mcpConnected ? 'on' : provider === 'canva' ? '' : 'ready'}
@@ -655,6 +608,7 @@ export function ChatBuildDialog() {
                           )}
                           {provider === 'canva' && mcpConfigured && !mcpConnected && (
                             <button
+                              type="button"
                               onClick={async () => {
                                 const url = await connectCanvaMcp(
                                   getToken,
@@ -662,7 +616,7 @@ export function ChatBuildDialog() {
                                 );
                                 if (url) window.location.href = url;
                               }}
-                              className="text-[10px] text-[var(--primary)] hover:underline"
+                              className="text-[11px] font-semibold text-brand hover:underline"
                             >
                               Connect MCP
                             </button>
@@ -670,6 +624,7 @@ export function ChatBuildDialog() {
                         </div>
                       ) : (
                         <button
+                          type="button"
                           onClick={async () => {
                             const url = await connectIntegration(
                               provider,
@@ -678,9 +633,9 @@ export function ChatBuildDialog() {
                             );
                             if (url) window.location.href = url;
                           }}
-                          className="flex items-center gap-1 text-[10px] text-[var(--primary)] hover:underline"
+                          className="flex items-center gap-1 text-[11px] font-semibold text-brand hover:underline"
                         >
-                          <Link2 className="w-2.5 h-2.5" />
+                          <Link2 className="h-2.5 w-2.5" aria-hidden />
                           Connect
                         </button>
                       )}
@@ -689,10 +644,10 @@ export function ChatBuildDialog() {
                 })}
               </div>
               <Link
-                href="/settings"
-                className="flex items-center gap-1 text-[10px] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                href={APP_SETTINGS}
+                className="flex items-center gap-1 text-[11px] text-dim hover:text-ink"
               >
-                <Settings className="w-3 h-3" />
+                <Settings className="h-3 w-3" aria-hidden />
                 Full settings
               </Link>
             </div>
@@ -700,36 +655,33 @@ export function ChatBuildDialog() {
         )}
       </AnimatePresence>
 
-      {/* Input Area */}
-      <div className="border-t border-[var(--border)]/30 bg-transparent px-4 py-3 space-y-2">
+      {/* Composer */}
+      <div className="space-y-2.5 border-t-[1.5px] border-rule px-4 py-3">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setImportOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--border)]/40 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/30 transition-colors"
-          >
-            <Layers className="w-3 h-3" />
+          <Button variant="ghost" size="sm" onClick={() => setImportOpen(true)}>
+            <Layers className="h-3 w-3" aria-hidden />
             Import
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={showConnectPanel}
             onClick={() => {
               setShowConnectPanel(!showConnectPanel);
               if (!showConnectPanel) void loadIntegrations();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-[var(--border)]/40 text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/30 transition-colors"
           >
-            <Link2 className="w-3 h-3" />
+            <Link2 className="h-3 w-3" aria-hidden />
             Connect
-            {integrations.filter((i) => i.connected).length > 0 && (
-              <span className="ml-1 w-4 h-4 rounded-full bg-green-500/20 text-green-400 text-[10px] font-bold flex items-center justify-center">
-                {integrations.filter((i) => i.connected).length}
-              </span>
-            )}
-          </button>
+            {connectedCount > 0 && <Tag tone="ok">{connectedCount}</Tag>}
+          </Button>
         </div>
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          <label htmlFor="chat-input" className="sr-only">
+            Message
+          </label>
           <textarea
+            id="chat-input"
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -737,25 +689,26 @@ export function ChatBuildDialog() {
             disabled={isLoading}
             placeholder={
               latestPlan
-                ? 'Tell Vocaweb what to change in the plan...'
-                : 'Describe what you want to build...'
+                ? 'Tell VocaWeb what to change in the plan'
+                : 'Describe what you want to build'
             }
             rows={1}
-            className="flex-1 resize-none bg-[var(--muted)]/50 border border-[var(--border)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all disabled:opacity-50 max-h-[120px]"
+            className="vw-input max-h-[120px] flex-1 resize-none py-3"
           />
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+          <Button
             type="submit"
+            variant="primary"
+            size="icon"
             disabled={isLoading || !input.trim()}
-            className="p-3 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all shrink-0"
+            aria-label="Send message"
+            className="!h-[46px] !w-[46px] shrink-0"
           >
             {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
             ) : (
-              <Send className="w-5 h-5" />
+              <Send className="h-5 w-5" aria-hidden />
             )}
-          </motion.button>
+          </Button>
         </form>
       </div>
 

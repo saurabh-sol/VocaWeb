@@ -9,6 +9,9 @@ interface ThemeToggleProps {
   className?: string;
 }
 
+const shell =
+  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border-[1.5px] border-rule bg-paper text-ink';
+
 export function ThemeToggle({ className }: ThemeToggleProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -16,15 +19,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
-    return (
-      <div
-        className={cn(
-          'h-9 w-9 rounded-full border border-[var(--border)] bg-[var(--muted)]/30',
-          className,
-        )}
-        aria-hidden
-      />
-    );
+    return <div className={cn(shell, className)} aria-hidden />;
   }
 
   const theme = resolvedTheme === 'dark' ? 'dark' : 'light';
@@ -33,9 +28,11 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     <AnimatedThemeToggler
       theme={theme}
       onThemeChange={setTheme}
+      duration={520}
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
       className={cn(
-        'inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--foreground)] transition-colors hover:bg-[var(--muted)]/50',
+        shell,
+        'shadow-hard-sm transition-[transform,box-shadow] duration-100 hover:translate-x-px hover:translate-y-px hover:shadow-none active:translate-x-0.5 active:translate-y-0.5',
         className,
       )}
     />

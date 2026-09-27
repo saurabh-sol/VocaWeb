@@ -29,10 +29,11 @@ export type AgentMode = 'projects' | 'chat' | 'planning' | 'sandbox';
 export type PublishStatus = 'idle' | 'publishing' | 'published' | 'error';
 export type ModelTier = 'v1' | 'v2' | 'v3';
 
+/** v1 is the only tier open today. The others are listed so people know what is coming. */
 export const MODEL_TIERS = {
-  v1: { label: 'Vocaweb v1', tag: 'base', free: true, tokensRequired: 0 },
-  v2: { label: 'Vocaweb v2', tag: 'pro', free: false, tokensRequired: 250_000 },
-  v3: { label: 'Vocaweb v3', tag: 'max', free: false, tokensRequired: 1_000_000 },
+  v1: { label: 'VocaWeb v1', tag: 'base', stack: 'HTML, CSS and JavaScript', available: true },
+  v2: { label: 'VocaWeb v2', tag: 'pro', stack: 'React and Vite', available: false },
+  v3: { label: 'VocaWeb v3', tag: 'max', stack: 'Next.js', available: false },
 } as const;
 
 function generateId() {
@@ -56,9 +57,7 @@ interface AppState {
   dashboardMode: 'text' | 'voice';
   initialPrompt: string | null;
   chatHistory: ChatMessage[];
-  username: string | null;
   selectedModel: ModelTier;
-  v1TrialsUsed: number;
 
   chatSessions: ChatSession[];
   activeSessionId: string | null;
@@ -81,9 +80,7 @@ interface AppState {
   publishDeploymentId: string | null;
   publishError: string | null;
 
-  setUsername: (name: string | null) => void;
   setSelectedModel: (model: ModelTier) => void;
-  incrementTrialUsed: () => void;
   setHasHydrated: (v: boolean) => void;
   setVoiceActive: (active: boolean) => void;
   setCurrentProject: (id: string | null) => void;
@@ -131,9 +128,7 @@ export const useAppStore = create<AppState>()(
       dashboardMode: 'text',
       initialPrompt: null,
       chatHistory: [],
-      username: null,
       selectedModel: 'v1',
-      v1TrialsUsed: 0,
 
       chatSessions: [],
       activeSessionId: null,
@@ -156,9 +151,8 @@ export const useAppStore = create<AppState>()(
       publishDeploymentId: null,
       publishError: null,
 
-      setUsername: (name) => set({ username: name }),
-      setSelectedModel: (model) => set({ selectedModel: model }),
-      incrementTrialUsed: () => set((s) => ({ v1TrialsUsed: s.v1TrialsUsed + 1 })),
+      setSelectedModel: (model) =>
+        set({ selectedModel: MODEL_TIERS[model].available ? model : 'v1' }),
       setHasHydrated: (v) => set({ _hasHydrated: v }),
       setVoiceActive: (active) => set({ isVoiceActive: active }),
       setCurrentProject: (id) => set((s) => {
@@ -450,9 +444,7 @@ export const useAppStore = create<AppState>()(
         };
       }),
       partialize: (state) => ({
-        username: state.username,
         selectedModel: state.selectedModel,
-        v1TrialsUsed: state.v1TrialsUsed,
         chatHistory: state.chatHistory,
         chatSessions: state.chatSessions,
         activeSessionId: state.activeSessionId,
@@ -469,6 +461,8 @@ export const useAppStore = create<AppState>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.setAgentMode('projects');
+          // A tier saved before it was closed falls back to v1.
+          state.setSelectedModel(state.selectedModel);
           state.finishBuild();
           state.clearPublishState();
           const uuidRe =

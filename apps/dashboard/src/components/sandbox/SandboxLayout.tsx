@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAuthSession } from '@/lib/auth';
 import {
   Send,
   Loader2,
@@ -29,15 +29,16 @@ import { CodeViewer } from './CodeViewer';
 import { WebContainerPreview } from './WebContainerPreview';
 import { SandboxEditPanel, type SandboxChatMessage } from './SandboxEditPanel';
 import type { SelectedElementInfo } from '@/lib/vocaweb-inspect-bridge';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, describeApiError } from '@/lib/api';
 import { normalizePublishUrl, resolvePublishDisplayUrl, isVercelDeploymentPreviewUrl } from '@/lib/utils';
 import { getDeployBaseDomain } from '@/lib/deploy-domain';
+import { Button } from '@/components/ui/button';
+import { Tag } from '@/components/ui/tag';
+import { cn } from '@/lib/utils';
 
 export function SandboxLayout() {
-  const { getAccessToken } = usePrivy();
-  // Using an async wrapper for getAccessToken to mimic the previous getToken behavior
-  const getToken = useCallback(async () => await getAccessToken(), [getAccessToken]);
-  
+  const { getToken } = useAuthSession();
+
   const isBuilding = useAppStore((s) => s.isBuilding);
   const sandboxViewMode = useAppStore((s) => s.sandboxViewMode);
   const sandboxSidebarOpen = useAppStore((s) => s.sandboxSidebarOpen);
@@ -127,7 +128,7 @@ export function SandboxLayout() {
         );
 
         if (!res.ok) {
-          setEditStatus('Fix failed — try describing the issue in the chat below.');
+          setEditStatus('The fix failed. Try describing the problem in the edit panel.');
           setTimeout(() => setEditStatus(null), 4000);
           return;
         }
@@ -136,17 +137,17 @@ export function SandboxLayout() {
         if (data.fixed && data.files) {
           setProjectFiles(data.files);
           incrementFileVersion();
-          setEditStatus('Fix applied — preview updating...');
+          setEditStatus('Fix applied. The preview is updating.');
         } else if (data.files) {
           setProjectFiles(data.files);
           incrementFileVersion();
-          setEditStatus('Attempted fix — check the preview.');
+          setEditStatus('A fix was attempted. Check the preview.');
         } else {
           setEditStatus('Could not fix automatically. Describe the issue below.');
         }
         setTimeout(() => setEditStatus(null), 3000);
       } catch {
-        setEditStatus('Fix failed — server error.');
+        setEditStatus('The fix failed because of a server error.');
         setTimeout(() => setEditStatus(null), 4000);
       } finally {
         setIsFixing(false);
@@ -222,7 +223,7 @@ export function SandboxLayout() {
             });
             stopPolling();
           } else if (statusData.status === 'error') {
-            setPublishState({ publishStatus: 'error', publishError: 'Build failed — your site could not be published through Vocaweb' });
+            setPublishState({ publishStatus: 'error', publishError: 'The build failed, so the site could not be published.' });
             stopPolling();
           }
         } catch {
@@ -304,7 +305,7 @@ export function SandboxLayout() {
       setEditStatus('Editing...');
 
       if (!currentProject) {
-        const errMsg = 'No project open — build a site first.';
+        const errMsg = 'No project is open. Build a site first.';
         setEditStatus(errMsg);
         setSandboxMessages((prev) => [...prev, { role: 'assistant', text: errMsg }]);
         setIsLoading(false);
@@ -326,8 +327,8 @@ export function SandboxLayout() {
         );
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          const errMsg = `Edit failed: ${(err as { error?: string }).error ?? res.statusText}`;
+          const err = await res.json().catch(() => null);
+          const errMsg = describeApiError(err, `The edit failed (${res.statusText}).`);
           setEditStatus(errMsg);
           setSandboxMessages((prev) => [...prev, { role: 'assistant', text: errMsg }]);
           setTimeout(() => setEditStatus(null), 4000);
@@ -390,28 +391,26 @@ export function SandboxLayout() {
     getDeployBaseDomain();
   const currentSlug = publishDomain?.split('.')[0] || '';
 
+  const pane = 'vw-card-flat overflow-hidden';
+
   return (
-    <div className="flex flex-col h-full gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Top bar */}
-      <div className="flex items-center justify-between max-md:flex-col max-md:items-stretch max-md:gap-2">
-        <div className="flex items-center gap-3 min-w-0">
-          <button
-            onClick={resetProject}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors shrink-0"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            New Project
-          </button>
-          <div className="h-4 w-px bg-[var(--border)]/30 shrink-0" />
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-medium text-[var(--foreground)] truncate">
-              {isBuilding || isFixing ? 'Building...' : 'Live Preview'}
-            </span>
-          </div>
+      <div className="flex items-center justify-between gap-3 max-md:flex-col max-md:items-stretch">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={resetProject} className="shrink-0">
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            New project
+          </Button>
+          <Tag tone={isBuilding || isFixing ? 'warn' : 'ok'}>
+            {isBuilding || isFixing ? 'Building' : 'Live preview'}
+          </Tag>
         </div>
-        <div className="flex items-center gap-1 shrink-0 relative">
-          {/* Publish Button */}
-          <button
+
+        <div className="relative flex shrink-0 items-center gap-1.5">
+          <Button
+            size="sm"
+            variant={isPublished ? 'secondary' : 'primary'}
             onClick={() => {
               if (isPublished) {
                 setShowPublishPanel((v) => !v);
@@ -421,70 +420,85 @@ export function SandboxLayout() {
               }
             }}
             disabled={!currentProject || fileCount === 0 || isPublishing}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-              isPublished
-                ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
-                : isPublishing
-                  ? 'bg-[var(--primary)]/20 text-[var(--primary)]'
-                  : 'bg-[var(--foreground)] text-[var(--background)] hover:opacity-90'
-            }`}
+            aria-expanded={showPublishPanel}
+            className={cn(isPublished && '!border-ok !text-ok')}
           >
             {isPublishing ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
             ) : isPublished ? (
-              <CheckCircle2 className="w-3.5 h-3.5" />
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
             ) : (
-              <Globe className="w-3.5 h-3.5" />
+              <Globe className="h-3.5 w-3.5" aria-hidden />
             )}
-            {isPublishing ? 'Publishing...' : isPublished ? 'Published' : 'Publish'}
-          </button>
+            {isPublishing ? 'Publishing' : isPublished ? 'Published' : 'Publish'}
+          </Button>
 
-          {/* Publish Panel (popover) */}
+          {/* Publish popover */}
           <AnimatePresence>
             {showPublishPanel && (
               <motion.div
                 ref={publishPanelRef}
-                initial={{ opacity: 0, y: -4, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-80 z-50 rounded-xl border border-[var(--border)]/40 bg-[var(--card)] shadow-2xl overflow-hidden"
+                className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-[10px] border-[1.5px] border-rule bg-paper shadow-hard-lg max-md:left-0 max-md:w-auto"
               >
-                <div className="px-4 py-3 border-b border-[var(--border)]/30">
+                <div className="border-b-[1.5px] border-rule px-4 py-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-[var(--foreground)]">
-                      {isPublished ? 'Published to the Web' : isPublishing ? 'Publishing...' : publishStatus === 'error' ? 'Publish Failed' : 'Publish to the Web'}
+                    <h3 className="text-sm font-semibold">
+                      {isPublished
+                        ? 'Published to the web'
+                        : isPublishing
+                          ? 'Publishing'
+                          : publishStatus === 'error'
+                            ? 'Publishing failed'
+                            : 'Publish to the web'}
                     </h3>
                     <button
+                      type="button"
                       onClick={() => setShowPublishPanel(false)}
-                      className="p-0.5 rounded text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                      aria-label="Close"
+                      className="rounded p-0.5 text-dim transition-colors hover:bg-wash hover:text-ink"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="h-3.5 w-3.5" aria-hidden />
                     </button>
                   </div>
                   {isPublishing && (
-                    <p className="text-[11px] text-[var(--muted-foreground)] mt-0.5">Deploying your website through Vocaweb...</p>
+                    <p className="mt-0.5 text-[11.5px] text-dim" role="status">
+                      Deploying your website
+                    </p>
                   )}
                   {publishStatus === 'error' && publishError && (
-                    <p className="text-[11px] text-red-400 mt-0.5">{publishError}</p>
+                    <p className="mt-0.5 text-[11.5px] text-bad" role="alert">
+                      {publishError}
+                    </p>
                   )}
                 </div>
 
-                <div className="p-3 space-y-2">
+                <div className="space-y-2 p-3">
                   {/* Domain row */}
-                  <div className="rounded-lg border border-[var(--border)]/30 bg-[var(--muted)]/20">
+                  <div className="vw-card-soft">
                     <button
+                      type="button"
+                      aria-expanded={isEditingDomain}
                       onClick={() => {
                         setSubdomainInput(currentSlug);
                         setIsEditingDomain((v) => !v);
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+                      className="flex w-full items-center justify-between px-3 py-2.5 text-left"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Pencil className="w-3.5 h-3.5 text-[var(--muted-foreground)] shrink-0" />
-                        <span className="text-xs font-medium text-[var(--foreground)] truncate">Customize Domain</span>
-                      </div>
-                      <ChevronRight className={`w-3.5 h-3.5 text-[var(--muted-foreground)] transition-transform ${isEditingDomain ? 'rotate-90' : ''}`} />
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Pencil className="h-3.5 w-3.5 shrink-0 text-dim" aria-hidden />
+                        <span className="truncate text-xs font-semibold">Choose the address</span>
+                      </span>
+                      <ChevronRight
+                        className={cn(
+                          'h-3.5 w-3.5 text-dim transition-transform',
+                          isEditingDomain && 'rotate-90',
+                        )}
+                        aria-hidden
+                      />
                     </button>
 
                     <AnimatePresence>
@@ -496,129 +510,138 @@ export function SandboxLayout() {
                           transition={{ duration: 0.15 }}
                           className="overflow-hidden"
                         >
-                          <div className="px-3 pb-3 space-y-2">
-                            <div className="flex items-center gap-1 rounded-lg border border-[var(--border)]/40 bg-[var(--background)] px-2 py-1.5">
+                          <div className="space-y-2 px-3 pb-3">
+                            <div className="flex items-center gap-1 rounded-lg border-[1.5px] border-rule bg-paper px-2 py-1.5 focus-within:shadow-hard-brand">
                               <input
                                 value={subdomainInput}
-                                onChange={(e) => setSubdomainInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                                onChange={(e) =>
+                                  setSubdomainInput(
+                                    e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                                  )
+                                }
+                                aria-label="Site name"
                                 placeholder="my-site"
                                 maxLength={30}
-                                className="flex-1 bg-transparent text-xs text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none min-w-0"
+                                className="min-w-0 flex-1 bg-transparent font-mono text-xs placeholder:text-faint focus:outline-none"
                               />
                               {baseDomain ? (
-                                <span className="text-[10px] text-[var(--muted-foreground)] shrink-0">.{baseDomain}</span>
+                                <span className="shrink-0 font-mono text-[10.5px] text-dim">
+                                  .{baseDomain}
+                                </span>
                               ) : null}
                             </div>
                             {subdomainInput.length > 0 && subdomainInput.length < 3 && (
-                              <p className="text-[10px] text-amber-400">Minimum 3 characters</p>
+                              <p className="text-[11px] text-warn">Use at least 3 characters</p>
                             )}
-                            <button
+                            <Button
+                              variant="primary"
+                              size="sm"
                               onClick={handleSaveSubdomain}
-                              disabled={domainSaving || subdomainInput.length < 3}
-                              className="w-full py-1.5 rounded-lg text-[11px] font-medium bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+                              disabled={subdomainInput.length < 3}
+                              loading={domainSaving}
+                              className="w-full"
                             >
-                              {domainSaving ? 'Saving...' : 'Save Domain'}
-                            </button>
+                              {domainSaving ? 'Saving' : 'Save address'}
+                            </Button>
                           </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
 
-                  {/* Live URL display */}
+                  {/* Live URL */}
                   {displayUrl && (
-                    <div className="rounded-lg border border-[var(--border)]/30 bg-[var(--muted)]/20 px-3 py-2.5">
+                    <div className="vw-card-soft bg-wash px-3 py-2.5">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-[10px] text-[var(--muted-foreground)] mb-0.5">Live URL</p>
-                          <p className="text-xs text-[var(--foreground)] truncate">{displayUrl}</p>
+                          <p className="vw-kicker mb-0.5 text-[10px]">Live address</p>
+                          <p className="truncate font-mono text-xs">{displayUrl}</p>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex shrink-0 items-center gap-1">
                           <button
+                            type="button"
                             onClick={copyUrl}
-                            className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors"
-                            title="Copy URL"
+                            aria-label="Copy the address"
+                            title="Copy the address"
+                            className="rounded-md p-1.5 text-dim transition-colors hover:bg-paper hover:text-ink"
                           >
-                            {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copiedUrl ? (
+                              <Check className="h-3.5 w-3.5 text-ok" aria-hidden />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" aria-hidden />
+                            )}
                           </button>
                           <a
                             href={displayUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 rounded-md text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors"
-                            title="Open in new tab"
+                            aria-label="Open the site in a new tab"
+                            title="Open in a new tab"
+                            className="rounded-md p-1.5 text-dim transition-colors hover:bg-paper hover:text-ink"
                           >
-                            <ExternalLink className="w-3.5 h-3.5" />
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                           </a>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Publish / Re-deploy button */}
                   {isPublished ? (
-                    <button
-                      onClick={() => {
-                        handlePublish();
-                      }}
-                      disabled={isPublishing}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium border border-[var(--border)]/30 text-[var(--foreground)] hover:bg-[var(--muted)]/30 transition-colors"
-                    >
-                      <RotateCw className="w-3.5 h-3.5" />
-                      Update Deployment
-                    </button>
+                    <Button size="sm" onClick={handlePublish} disabled={isPublishing} className="w-full">
+                      <RotateCw className="h-3.5 w-3.5" aria-hidden />
+                      Update the live site
+                    </Button>
                   ) : publishStatus === 'error' ? (
-                    <button
-                      onClick={handlePublish}
-                      className="w-full py-2 rounded-lg text-xs font-medium bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 transition-opacity"
-                    >
-                      Retry Publish
-                    </button>
-                  ) : isPublishing ? (
-                    <div className="flex items-center justify-center gap-2 py-2 text-xs text-[var(--muted-foreground)]">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)]" />
-                      Deploying your website through Vocaweb...
-                    </div>
+                    <Button variant="primary" size="sm" onClick={handlePublish} className="w-full">
+                      Try publishing again
+                    </Button>
                   ) : null}
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setSandboxSidebarOpen(!sandboxSidebarOpen)}
-            className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors"
-            title={sandboxSidebarOpen ? 'Hide code files' : 'Show code files'}
+            aria-pressed={sandboxSidebarOpen}
+            aria-label={sandboxSidebarOpen ? 'Hide the file list' : 'Show the file list'}
+            title={sandboxSidebarOpen ? 'Hide the file list' : 'Show the file list'}
           >
             {sandboxSidebarOpen ? (
-              <PanelLeftClose className="w-4 h-4" />
+              <PanelLeftClose className="h-4 w-4" aria-hidden />
             ) : (
-              <PanelLeft className="w-4 h-4" />
+              <PanelLeft className="h-4 w-4" aria-hidden />
             )}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setEditPanelOpen(!editPanelOpen)}
-            className="hidden md:flex p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]/40 transition-colors"
-            title={editPanelOpen ? 'Hide AI panel' : 'Show AI panel'}
+            aria-pressed={editPanelOpen}
+            aria-label={editPanelOpen ? 'Hide the edit panel' : 'Show the edit panel'}
+            title={editPanelOpen ? 'Hide the edit panel' : 'Show the edit panel'}
+            className="max-md:hidden"
           >
             {editPanelOpen ? (
-              <PanelRightClose className="w-4 h-4" />
+              <PanelRightClose className="h-4 w-4" aria-hidden />
             ) : (
-              <PanelRight className="w-4 h-4" />
+              <PanelRight className="h-4 w-4" aria-hidden />
             )}
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Main area — file tree | preview/code | AI panel */}
-      <div className="flex-1 flex flex-row gap-2 min-h-0 overflow-hidden max-md:flex-col max-md:min-h-[50vh]">
+      {/* File list, preview or code, edit panel */}
+      <div className="flex min-h-0 flex-1 flex-row gap-3 overflow-hidden max-md:min-h-[50vh] max-md:flex-col">
         {sandboxSidebarOpen && fileCount > 0 && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="md:hidden shrink-0 max-h-40 rounded-xl border border-[var(--border)]/30 bg-[var(--card)]/10 backdrop-blur-md overflow-hidden"
+            className={cn(pane, 'max-h-40 shrink-0 md:hidden')}
           >
             <FileExplorer
               files={projectFiles}
@@ -631,10 +654,10 @@ export function SandboxLayout() {
         {sandboxSidebarOpen && fileCount > 0 && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 220, opacity: 1 }}
+            animate={{ width: 228, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="hidden md:block shrink-0 rounded-xl border border-[var(--border)]/30 bg-[var(--card)]/10 backdrop-blur-md overflow-hidden"
+            className={cn(pane, 'hidden shrink-0 md:block')}
           >
             <FileExplorer
               files={projectFiles}
@@ -644,21 +667,29 @@ export function SandboxLayout() {
           </motion.div>
         )}
 
-        <div className="flex-1 min-w-0 rounded-xl border border-[var(--border)]/30 bg-[var(--card)]/10 backdrop-blur-md overflow-hidden">
-          <div className="flex items-center gap-1 px-3 py-1.5 border-b border-[var(--border)]/30">
+        <div className="vw-card min-w-0 flex-1 overflow-hidden">
+          <div
+            role="tablist"
+            aria-label="Sandbox view"
+            className="flex items-center gap-1 border-b-[1.5px] border-rule px-3 py-1.5"
+          >
             <button
+              type="button"
+              role="tab"
+              aria-selected={sandboxViewMode === 'preview'}
+              data-active={sandboxViewMode === 'preview'}
               onClick={() => setSandboxViewMode('preview')}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                sandboxViewMode === 'preview'
-                  ? 'bg-[var(--primary)]/20 text-[var(--foreground)]'
-                  : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-              }`}
+              className="vw-navlink !h-7 !rounded-md !px-2.5 !text-xs"
             >
-              <Monitor className="w-3 h-3" />
+              <Monitor className="h-3 w-3" aria-hidden />
               Live
             </button>
             {fileCount > 0 && (
               <button
+                type="button"
+                role="tab"
+                aria-selected={sandboxViewMode === 'code'}
+                data-active={sandboxViewMode === 'code'}
                 onClick={() => {
                   setSandboxViewMode('code');
                   setSandboxSidebarOpen(true);
@@ -667,18 +698,14 @@ export function SandboxLayout() {
                     if (first) setActiveFile(first);
                   }
                 }}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                  sandboxViewMode === 'code'
-                    ? 'bg-[var(--primary)]/20 text-[var(--foreground)]'
-                    : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-                }`}
+                className="vw-navlink !h-7 !rounded-md !px-2.5 !text-xs"
               >
                 Code
               </button>
             )}
           </div>
 
-          <div className="h-[calc(100%-36px)] max-md:h-[min(60vh,500px)]">
+          <div className="h-[calc(100%-42px)] max-md:h-[min(60vh,500px)]">
             {sandboxViewMode === 'code' && fileCount > 0 ? (
               <CodeViewer filePath={activeFile} content={activeContent} />
             ) : fileCount > 0 ? (
@@ -696,7 +723,7 @@ export function SandboxLayout() {
                 }}
               />
             ) : (
-              <div className="flex items-center justify-center h-full text-sm text-[var(--muted-foreground)]">
+              <div className="flex h-full items-center justify-center text-sm text-dim">
                 Start a conversation to build your site
               </div>
             )}
@@ -709,7 +736,7 @@ export function SandboxLayout() {
             animate={{ width: 320, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="hidden md:flex shrink-0 rounded-xl border border-[var(--border)]/30 overflow-hidden min-h-0"
+            className={cn(pane, 'hidden min-h-0 shrink-0 md:flex')}
           >
             <SandboxEditPanel
               selectedElement={selectedElement}
@@ -731,44 +758,52 @@ export function SandboxLayout() {
         )}
       </div>
 
-      {/* Mobile bottom chat — desktop uses right panel */}
-      <div className="md:hidden rounded-xl border border-[var(--border)]/30 bg-[var(--card)]/10 backdrop-blur-md px-4 py-2.5 space-y-1.5">
+      {/* Small screens edit from a bar at the bottom; larger ones use the side panel. */}
+      <div className={cn(pane, 'space-y-1.5 px-3 py-2.5 md:hidden')}>
         <AnimatePresence>
           {editStatus && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]"
+              role="status"
+              className="flex items-center gap-2 font-mono text-[11.5px] text-dim"
             >
               {(isLoading || isFixing) && (
-                <Loader2 className="w-3 h-3 animate-spin text-[var(--primary)] shrink-0" />
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />
               )}
               <span>{editStatus}</span>
             </motion.div>
           )}
         </AnimatePresence>
-        <form onSubmit={handleSubmit} className="flex items-center gap-3">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+          <label htmlFor="sandbox-mobile-input" className="sr-only">
+            Edit instructions
+          </label>
           <input
+            id="sandbox-mobile-input"
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isLoading}
-            placeholder={currentProject ? 'Ask Vocaweb to edit, improve, or add features...' : 'Build a site first, then edit here...'}
-            className="flex-1 bg-transparent text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none disabled:opacity-50"
+            placeholder={currentProject ? 'Describe a change to your site' : 'Build a site first'}
+            className="min-w-0 flex-1 bg-transparent text-sm placeholder:text-faint focus:outline-none disabled:opacity-50"
           />
-          <button
+          <Button
             type="submit"
+            variant="primary"
+            size="icon"
             disabled={isLoading || !input.trim()}
-            className="p-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0"
+            aria-label="Apply the edit"
+            className="shrink-0"
           >
             {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="h-4 w-4" aria-hidden />
             )}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

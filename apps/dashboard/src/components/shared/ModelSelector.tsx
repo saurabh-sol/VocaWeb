@@ -1,25 +1,34 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Lock } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Check, ChevronDown } from 'lucide-react';
 import { useAppStore, MODEL_TIERS, type ModelTier } from '@/store';
+import { Tag } from '@/components/ui/tag';
+import { cn } from '@/lib/utils';
 
 export function ModelSelector() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const listId = useId();
   const selectedModel = useAppStore((s) => s.selectedModel);
   const setSelectedModel = useAppStore((s) => s.setSelectedModel);
 
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+    if (!open) return;
+    const onPointer = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   const current = MODEL_TIERS[selectedModel];
 
@@ -27,74 +36,64 @@ export function ModelSelector() {
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border)]/40 bg-[var(--card)]/20 hover:bg-[var(--card)]/40 transition-colors text-xs font-medium"
+        onClick={() => setOpen((value) => !value)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        className="flex items-center gap-1.5 rounded-lg border-[1.5px] border-rule bg-paper px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-wash"
       >
-        <span className="text-[var(--foreground)]">{current.label}</span>
-        <span className="text-[var(--muted-foreground)]">({current.tag})</span>
-        <ChevronDown className={`w-3 h-3 text-[var(--muted-foreground)] transition-transform ${open ? 'rotate-180' : ''}`} />
+        {current.label}
+        <ChevronDown
+          className={cn('h-3 w-3 text-dim transition-transform', open && 'rotate-180')}
+          aria-hidden
+        />
       </button>
 
       <AnimatePresence>
         {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.95 }}
+          <motion.ul
+            id={listId}
+            role="listbox"
+            aria-label="Model"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-full left-0 mt-1 w-64 rounded-xl border border-[var(--border)]/40 bg-[var(--card)]/95 backdrop-blur-xl shadow-xl z-50 overflow-hidden"
+            className="absolute left-0 top-full z-50 mt-2 w-[268px] overflow-hidden rounded-[10px] border-[1.5px] border-rule bg-paper shadow-hard"
           >
-            {(Object.entries(MODEL_TIERS) as [ModelTier, typeof MODEL_TIERS.v1][]).map(
+            {(Object.entries(MODEL_TIERS) as [ModelTier, (typeof MODEL_TIERS)[ModelTier]][]).map(
               ([tier, info]) => {
-                const isSelected = selectedModel === tier;
-                const isLocked = tier === 'v2' || tier === 'v3';
-
+                const selected = selectedModel === tier;
                 return (
-                  <button
-                    key={tier}
-                    type="button"
-                    onClick={() => {
-                      setSelectedModel(tier);
-                      setOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                      isSelected
-                        ? 'bg-[var(--primary)]/10'
-                        : 'hover:bg-[var(--muted)]/30'
-                    }`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-[var(--foreground)]">
-                          {info.label}
-                        </span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                          tier === 'v1'
-                            ? 'bg-blue-500/15 text-blue-400'
-                            : tier === 'v2'
-                              ? 'bg-amber-500/15 text-amber-400'
-                              : 'bg-purple-500/15 text-purple-400'
-                        }`}>
-                          {info.tag}
-                        </span>
+                  <li key={tier} role="option" aria-selected={selected}>
+                    <button
+                      type="button"
+                      disabled={!info.available}
+                      onClick={() => {
+                        setSelectedModel(tier);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-center gap-3 border-b border-dotted border-soft px-4 py-3 text-left transition-colors last:border-b-0',
+                        info.available ? 'hover:bg-wash' : 'cursor-not-allowed opacity-55',
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold">{info.label}</span>
+                          <Tag tone={info.available ? 'brand' : 'neutral'}>
+                            {info.available ? 'Free' : 'Soon'}
+                          </Tag>
+                        </div>
+                        <p className="mt-0.5 text-[11.5px] text-dim">{info.stack}</p>
                       </div>
-                      <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">
-                        {tier === 'v1'
-                          ? 'Free — HTML, CSS & JavaScript'
-                          : `Hold ${info.tokensRequired.toLocaleString()} $DROOP`}
-                      </p>
-                    </div>
-                    {isLocked && (
-                      <Lock className="w-3.5 h-3.5 text-[var(--muted-foreground)]/50 shrink-0" />
-                    )}
-                    {isSelected && (
-                      <div className="w-2 h-2 rounded-full bg-[var(--primary)] shrink-0" />
-                    )}
-                  </button>
+                      {selected && <Check className="h-4 w-4 shrink-0" aria-hidden />}
+                    </button>
+                  </li>
                 );
               },
             )}
-          </motion.div>
+          </motion.ul>
         )}
       </AnimatePresence>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { API_BASE, apiFetch } from './api';
+import { API_BASE, apiFetch, describeApiError } from './api';
 
 type GetTokenFn = (options?: { skipCache?: boolean }) => Promise<string | null>;
 
@@ -25,10 +25,9 @@ export async function streamBuild(
     getToken?: GetTokenFn;
     initialFiles?: Record<string, string>;
     model?: string;
-    walletAddress?: string | null;
   } & StreamBuildCallbacks,
 ): Promise<void> {
-  const { channel = 'chat', projectId, sessionId, getToken, initialFiles, model, walletAddress, onProgress, onFile, onDone, onError } =
+  const { channel = 'chat', projectId, sessionId, getToken, initialFiles, model, onProgress, onFile, onDone, onError } =
     options;
 
   const body = JSON.stringify({
@@ -37,7 +36,6 @@ export async function streamBuild(
     channel,
     sessionId: sessionId ?? undefined,
     model: model ?? undefined,
-    walletAddress: walletAddress ?? undefined,
   });
 
   const res = getToken
@@ -57,7 +55,7 @@ export async function streamBuild(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    onError?.(err.error ?? 'Stream request failed');
+    onError?.(describeApiError(err, 'The build could not be started.'));
     return;
   }
 

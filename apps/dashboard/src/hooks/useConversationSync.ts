@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useEffect, useRef } from 'react';
+import { useAuthSession } from '@/lib/auth';
 import { useAppStore, useHydrated } from '@/store';
 import {
   bulkSyncLocalSessions,
@@ -14,9 +14,7 @@ import {
 } from '@/lib/conversations';
 
 export function useConversationSync() {
-  const { getAccessToken, authenticated: isSignedIn } = usePrivy();
-  const getToken = useCallback(async () => await getAccessToken(), [getAccessToken]);
-  
+  const { getToken, isSignedIn } = useAuthSession();
   const hydrated = useHydrated();
   const syncedRef = useRef(false);
 

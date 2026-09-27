@@ -22,7 +22,7 @@ export const SCAFFOLD_FILES_V1: Record<string, string> = {
 <body>
   <div style="text-align:center">
     <div class="spinner"></div>
-    <h1>Vocaweb is building your site</h1>
+    <h1>VocaWeb is building your site</h1>
     <p>Your live preview will appear shortly</p>
   </div>
 </body>
@@ -111,7 +111,7 @@ export default defineConfig({
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vocaweb — Building...</title>
+    <title>VocaWeb — Building...</title>
   </head>
   <body class="min-h-screen bg-zinc-950 text-white antialiased">
     <div id="root"></div>
@@ -137,7 +137,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
       <div className="h-16 w-16 rounded-full border-2 border-amber-400/30 border-t-amber-400 animate-spin" />
       <div className="text-center">
-        <h1 className="font-serif text-3xl font-bold tracking-tight">Vocaweb is building your site</h1>
+        <h1 className="font-serif text-3xl font-bold tracking-tight">VocaWeb is building your site</h1>
         <p className="mt-2 text-zinc-400 text-sm">Your live preview will update as sections are ready</p>
       </div>
     </main>
@@ -228,7 +228,7 @@ export default config;
   'app/layout.tsx': `import './globals.css';
 
 export const metadata = {
-  title: 'Vocaweb — Building...',
+  title: 'VocaWeb — Building...',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -244,7 +244,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
       <div className="h-16 w-16 rounded-full border-2 border-amber-400/30 border-t-amber-400 animate-spin" />
       <div className="text-center">
-        <h1 className="text-3xl font-bold tracking-tight">Vocaweb is building your site</h1>
+        <h1 className="text-3xl font-bold tracking-tight">VocaWeb is building your site</h1>
         <p className="mt-2 text-zinc-400 text-sm">Your live preview will update as sections are ready</p>
       </div>
     </main>

@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Layers, Rocket } from 'lucide-react';
-import { usePrivy } from '@privy-io/react-auth';
+import { Layers } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useAuthSession } from '@/lib/auth';
 import { useAppStore } from '@/store';
 import { ImportSourceModal } from './ImportSourceModal';
 
 export function ImportStackFlow({ projectId }: { projectId?: string }) {
-  const { authenticated: isSignedIn } = usePrivy();
+  const { isSignedIn } = useAuthSession();
   const [open, setOpen] = useState(false);
   const setBuildPlan = useAppStore((s) => s.setBuildPlan);
   const setAgentMode = useAppStore((s) => s.setAgentMode);
@@ -21,14 +22,10 @@ export function ImportStackFlow({ projectId }: { projectId?: string }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)]/40 bg-[var(--card)]/10 hover:bg-[var(--muted)]/30 text-sm font-medium transition-colors"
-      >
-        <Layers className="w-4 h-4 text-[var(--primary)]" />
-        Import Stack
-      </button>
+      <Button size="sm" onClick={() => setOpen(true)} className="shrink-0">
+        <Layers className="h-4 w-4" aria-hidden />
+        Import sources
+      </Button>
 
       <ImportSourceModal
         open={open}
@@ -52,7 +49,7 @@ export function ImportStackFlow({ projectId }: { projectId?: string }) {
             setAgentMode('sandbox');
             addChatMessage({
               role: 'assistant',
-              text: 'Your site is ready from the import stack! Check the live preview.',
+              text: 'Your site is built from the imported sources. Check the live preview.',
               filesGenerated: Object.keys(buildResult.files).length,
             });
           }
@@ -64,14 +61,11 @@ export function ImportStackFlow({ projectId }: { projectId?: string }) {
 
 export function ImportStackBanner() {
   return (
-    <div className="rounded-xl border border-[var(--primary)]/20 bg-[var(--primary)]/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="vw-card-soft flex flex-col justify-between gap-3 border-dashed p-4 sm:flex-row sm:items-center">
       <div>
-        <p className="text-sm font-medium flex items-center gap-2">
-          <Rocket className="w-4 h-4 text-[var(--primary)]" />
-          Build from your stack
-        </p>
-        <p className="text-xs text-[var(--muted-foreground)] mt-1">
-          Combine Notion copy, Canva assets, and Figma design tokens in one build.
+        <p className="text-sm font-semibold">Build from what you already have</p>
+        <p className="mt-1 text-[13px] text-dim">
+          Combine Notion copy, Canva assets and Figma design tokens in one build.
         </p>
       </div>
       <ImportStackFlow />

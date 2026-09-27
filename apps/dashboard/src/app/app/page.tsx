@@ -2,18 +2,29 @@
 
 import { useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { Type, Mic } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Mic, Type } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore, useHydrated } from '@/store';
 import { useVoice } from '@/components/voice/VoiceProvider';
 import { prewarmWebContainer } from '@/hooks/useWebContainer';
 import { ProjectsView } from '@/components/dashboard/ProjectsView';
+import { Segmented, Skeleton } from '@/components/ui/feedback';
 import { lazyWithRetry } from '@/lib/lazy-with-retry';
 
+/** Matches the dialog's frame so nothing jumps when it arrives. */
 function DialogLoader() {
   return (
-    <div className="flex items-center justify-center min-h-[320px]">
-      <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+    <div className="vw-card flex min-h-[420px] flex-1 flex-col gap-4 p-6">
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-10 w-10 rounded-lg" />
+        <div className="grid gap-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-48" />
+        </div>
+      </div>
+      <Skeleton className="mt-4 h-12 w-2/3" />
+      <Skeleton className="ml-auto h-12 w-1/2" />
+      <Skeleton className="mt-auto h-12 w-full" />
     </div>
   );
 }
@@ -39,7 +50,9 @@ const SandboxLayout = dynamic(
   { ssr: false, loading: DialogLoader },
 );
 
-export default function DashboardPage() {
+const FILL = 'flex min-h-[calc(100dvh-60px-4rem)] flex-1 flex-col';
+
+export default function AppHomePage() {
   const hydrated = useHydrated();
   const agentMode = useAppStore((s) => s.agentMode);
   const dashboardMode = useAppStore((s) => s.dashboardMode);
@@ -52,7 +65,8 @@ export default function DashboardPage() {
   const didPrewarm = useRef(false);
 
   useEffect(() => {
-    if (!didPrewarm.current) {
+    // v1 sites are plain HTML and preview without the sandbox runtime.
+    if (!didPrewarm.current && useAppStore.getState().selectedModel !== 'v1') {
       didPrewarm.current = true;
       void prewarmWebContainer();
     }
@@ -71,7 +85,7 @@ export default function DashboardPage() {
             await connect();
           }
         } catch (err) {
-          console.error('[Vocaweb] Auto-start voice failed:', err);
+          console.error('[VocaWeb] Auto-start voice failed:', err);
         }
       })();
     }
@@ -79,8 +93,8 @@ export default function DashboardPage() {
 
   if (!hydrated) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-4rem)]">
-        <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+      <div className={FILL}>
+        <DialogLoader />
       </div>
     );
   }
@@ -91,7 +105,7 @@ export default function DashboardPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="relative flex h-full min-h-[calc(100vh-4rem)] flex-col max-md:min-h-[calc(100dvh-5rem)]"
+        className={`relative ${FILL}`}
       >
         <SandboxLayout />
       </motion.div>
@@ -105,32 +119,17 @@ export default function DashboardPage() {
   const BuildInterface = dashboardMode === 'voice' ? VoiceBuildDialog : ChatBuildDialog;
 
   return (
-    <div className="relative flex h-full min-h-[calc(100vh-4rem)] flex-col gap-4 max-md:min-h-[calc(100dvh-5rem)] max-md:gap-3">
+    <div className={`relative gap-4 ${FILL}`}>
       <div className="flex justify-end">
-        <div className="flex bg-[var(--card)]/10 backdrop-blur-md rounded-full p-1 border border-[var(--border)]/30 shadow-sm w-fit">
-          <button
-            onClick={() => setDashboardMode('text')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ${
-              dashboardMode === 'text'
-                ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-            }`}
-          >
-            <Type className="w-3.5 h-3.5" />
-            Chat
-          </button>
-          <button
-            onClick={() => setDashboardMode('voice')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ${
-              dashboardMode === 'voice'
-                ? 'bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
-            }`}
-          >
-            <Mic className="w-3.5 h-3.5" />
-            Voice
-          </button>
-        </div>
+        <Segmented
+          label="Input mode"
+          value={dashboardMode}
+          onChange={setDashboardMode}
+          options={[
+            { value: 'text', label: 'Chat', icon: <Type className="h-3.5 w-3.5" aria-hidden /> },
+            { value: 'voice', label: 'Voice', icon: <Mic className="h-3.5 w-3.5" aria-hidden /> },
+          ]}
+        />
       </div>
       <AnimatePresence mode="wait">
         <motion.div
@@ -139,7 +138,7 @@ export default function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.2 }}
-          className="flex-1"
+          className="flex min-h-0 flex-1 flex-col"
         >
           <BuildInterface />
         </motion.div>

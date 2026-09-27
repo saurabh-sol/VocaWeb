@@ -35,18 +35,18 @@ function getFileIcon(filename: string) {
     case 'ts':
     case 'jsx':
     case 'js':
-      return <FileCode className="w-4 h-4 text-blue-400" />;
+      return <FileCode className="h-4 w-4 shrink-0 text-brand" aria-hidden />;
     case 'json':
-      return <FileJson className="w-4 h-4 text-yellow-400" />;
+      return <FileJson className="h-4 w-4 shrink-0 text-warn" aria-hidden />;
     case 'css':
-      return <Palette className="w-4 h-4 text-purple-400" />;
+      return <Palette className="h-4 w-4 shrink-0 text-ok" aria-hidden />;
     case 'md':
-      return <FileText className="w-4 h-4 text-gray-400" />;
+      return <FileText className="h-4 w-4 shrink-0 text-dim" aria-hidden />;
     case 'mjs':
     case 'cjs':
-      return <Settings className="w-4 h-4 text-gray-400" />;
+      return <Settings className="h-4 w-4 shrink-0 text-dim" aria-hidden />;
     default:
-      return <FileType className="w-4 h-4 text-[var(--muted-foreground)]" />;
+      return <FileType className="h-4 w-4 shrink-0 text-dim" aria-hidden />;
   }
 }
 
@@ -99,21 +99,23 @@ function TreeItem({
     return (
       <div>
         <button
+          type="button"
+          aria-expanded={isOpen}
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1.5 w-full px-2 py-1 text-xs hover:bg-[var(--muted)]/40 rounded-md transition-colors group"
+          className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors hover:bg-wash"
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
         >
           {isOpen ? (
-            <ChevronDown className="w-3 h-3 text-[var(--muted-foreground)] shrink-0" />
+            <ChevronDown className="h-3 w-3 shrink-0 text-dim" aria-hidden />
           ) : (
-            <ChevronRight className="w-3 h-3 text-[var(--muted-foreground)] shrink-0" />
+            <ChevronRight className="h-3 w-3 shrink-0 text-dim" aria-hidden />
           )}
           {isOpen ? (
-            <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
+            <FolderOpen className="h-4 w-4 shrink-0" aria-hidden />
           ) : (
-            <Folder className="w-4 h-4 text-amber-400 shrink-0" />
+            <Folder className="h-4 w-4 shrink-0" aria-hidden />
           )}
-          <span className="text-[var(--foreground)] truncate">{node.name}</span>
+          <span className="truncate font-medium">{node.name}</span>
         </button>
         <AnimatePresence initial={false}>
           {isOpen && (
@@ -143,11 +145,11 @@ function TreeItem({
 
   return (
     <button
+      type="button"
+      aria-current={isActive ? 'true' : undefined}
       onClick={() => onFileSelect(node.path)}
-      className={`flex items-center gap-1.5 w-full px-2 py-1 text-xs rounded-md transition-all ${
-        isActive
-          ? 'bg-[var(--primary)]/20 text-[var(--primary-foreground)]'
-          : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)]/40 hover:text-[var(--foreground)]'
+      className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
+        isActive ? 'bg-ink text-paper [&_svg]:text-paper' : 'text-dim hover:bg-wash hover:text-ink'
       }`}
       style={{ paddingLeft: `${depth * 12 + 20}px` }}
     >
@@ -162,18 +164,12 @@ export function FileExplorer({ files, activeFile, onFileSelect }: FileExplorerPr
   const fileCount = Object.keys(files).length;
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-3 py-2.5 border-b border-[var(--border)]/30">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-widest text-[var(--muted-foreground)]">
-            Explorer
-          </span>
-          <span className="text-[10px] text-[var(--muted-foreground)]">
-            {fileCount} files
-          </span>
-        </div>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b-[1.5px] border-rule px-3 py-2.5">
+        <span className="vw-kicker text-ink">Files</span>
+        <span className="font-mono text-[10.5px] text-dim">{fileCount}</span>
       </div>
-      <div className="flex-1 overflow-y-auto py-1 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto px-1 py-1.5">
         {tree.map((node) => (
           <TreeItem
             key={node.path}

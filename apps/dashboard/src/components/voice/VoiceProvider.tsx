@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useAuthSession } from '@/lib/auth';
 import {
   VoiceClient,
   AudioManager,
@@ -110,7 +110,7 @@ function formatTranscriptForApi(messages: TranscriptMessage[]): string {
   return messages
     .map((m) => {
       const ts = m.timestamp ? `[${m.timestamp}] ` : '';
-      return `${ts}${m.role === 'user' ? 'User' : 'Vocaweb'}: ${m.text}`;
+      return `${ts}${m.role === 'user' ? 'User' : 'VocaWeb'}: ${m.text}`;
     })
     .join('\n');
 }
@@ -141,8 +141,7 @@ function mergeUserIntoTranscript(
 }
 
 export function VoiceProvider({ children }: { children: ReactNode }) {
-  const { getAccessToken, user: privyUser } = usePrivy();
-  const getToken = useCallback(async () => await getAccessToken(), [getAccessToken]);
+  const { getToken } = useAuthSession();
   const currentProject = useAppStore((s) => s.currentProject);
   const setCurrentProject = useAppStore((s) => s.setCurrentProject);
   const setProjectFiles = useAppStore((s) => s.setProjectFiles);
@@ -291,13 +290,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       try {
         const currentFiles = useAppStore.getState().projectFiles;
         const currentModel = useAppStore.getState().selectedModel;
-        const currentWallet = privyUser?.wallet?.address ?? null;
         await streamBuild(contextDescription, {
           channel: 'voice',
           getToken,
           initialFiles: currentFiles,
           model: currentModel,
-          walletAddress: currentWallet,
           onFile: (_path, _content, files) => {
             mergeProjectFiles(files);
           },
@@ -331,7 +328,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
       try {
         const currentModel = useAppStore.getState().selectedModel;
-        const currentWallet = privyUser?.wallet?.address ?? null;
         const res = await apiFetch(
           '/ai/voice/action',
           {
@@ -341,7 +337,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
               args: { description, style },
               transcript: transcriptText || undefined,
               model: currentModel,
-              walletAddress: currentWallet ?? undefined,
             }),
           },
           getToken,
@@ -446,7 +441,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
         const transcriptText = formatTranscriptForApi(transcriptRef.current);
         const toolModel = useAppStore.getState().selectedModel;
-        const toolWallet = privyUser?.wallet?.address ?? null;
         const res = await apiFetch(
           '/ai/voice/action',
           {
@@ -457,7 +451,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
               projectId: currentProjectRef.current ?? undefined,
               transcript: transcriptText || undefined,
               model: toolModel,
-              walletAddress: toolWallet ?? undefined,
             }),
           },
           getToken,
@@ -618,7 +611,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     });
 
     client.on('error', (err) => {
-      console.error('[Vocaweb] Voice error:', err);
+      console.error('[VocaWeb] Voice error:', err);
       setMicError(err.message || 'Voice connection error');
     });
 
@@ -777,7 +770,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (!clientRef.current || !audioRef.current) return;
 
     if (isSpeaking || isProcessing || isAwaitingGreeting) {
-      setMicError('Please wait for Vocaweb to finish speaking first.');
+      setMicError('Please wait for VocaWeb to finish speaking first.');
       return;
     }
 
@@ -908,7 +901,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         getToken,
       );
     } catch (err) {
-      console.error('[Vocaweb] Failed to save transcript:', err);
+      console.error('[VocaWeb] Failed to save transcript:', err);
     }
   }, [transcript, syncTranscriptToDb, getToken]);
 
