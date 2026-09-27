@@ -6,8 +6,8 @@
 
 | App | Path | Default port | Deploy target |
 |-----|------|--------------|---------------|
-| **Dashboard** | `apps/dashboard` | 3002 | Vercel |
-| **API** | `apps/api` | 3001 | Render |
+| **Dashboard** | `apps/dashboard` | 3002 | Render, https://vocaweb.onrender.com |
+| **API** | `apps/api` | 3001 | Render, https://vocaweb-api.onrender.com |
 
 Shared packages live under `packages/` (`ai`, `db`, `shared`, `voice`).
 
@@ -34,7 +34,7 @@ Realtime voice talks to xAI directly.
 - **Node.js** 22+
 - **pnpm** 10+ (`corepack enable`)
 - **PostgreSQL** (Neon recommended)
-- **Redis**
+- **Redis** (optional, speeds up chat history)
 - A **Clerk** application with Google and GitHub enabled
 - A **Vercel AI Gateway** API key with credit
 
@@ -121,11 +121,19 @@ Local SDK packages are **gitignored** and kept on your machine only:
 
 ## Deployment
 
-1. **API** on Render (see the `render.yaml` blueprint). Set every variable marked `sync: false`.
-2. **Dashboard** on Vercel, root directory `apps/dashboard`, with the variables from `apps/dashboard/.env.example`.
-3. **DNS**: point `api.*` to Render and `app.*` to Vercel, with a wildcard `*` for user sites on Vercel.
-4. Set `WEB_APP_URL` on the API to the dashboard's address so sign-in tokens and CORS are accepted.
-5. Register the OAuth redirect URIs for Notion, Figma and Canva as `https://api.yourdomain.com/api/integrations/{provider}/callback`.
+Both apps run on Render as web services built from this repository (see `render.yaml`). Pushing to `main` redeploys them.
+
+| Service | Build | Start |
+|---------|-------|-------|
+| `vocaweb-api` | `pnpm install` | `pnpm --filter @theo/api exec tsx src/server.ts` |
+| `vocaweb` | `pnpm install` then `pnpm --filter @theo/dashboard build` | `pnpm --filter @theo/dashboard start` |
+
+1. Set every variable marked `sync: false` in the Render dashboard.
+2. `WEB_APP_URL` and `CLERK_AUTHORIZED_PARTIES` on the API must be the website's address, or sign-in tokens and CORS are refused.
+3. `NEXT_PUBLIC_*` values are read when the website builds, so redeploy it after changing one.
+4. Run `pnpm db:migrate` against the database after pulling new migrations.
+5. Register the OAuth redirect URIs for Notion, Figma and Canva as `https://vocaweb-api.onrender.com/api/integrations/{provider}/callback`.
+6. User sites still publish to Vercel through `VERCEL_TOKEN`.
 
 ## License
 

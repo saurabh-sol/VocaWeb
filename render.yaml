@@ -1,27 +1,33 @@
-# Render Blueprint: VocaWeb API (Fastify, pnpm monorepo)
+# Render Blueprint: VocaWeb (pnpm monorepo)
 # https://render.com/docs/blueprint-spec
+#
+# Two web services from the same repository:
+#   vocaweb-api  Fastify API       https://vocaweb-api.onrender.com
+#   vocaweb      Next.js website   https://vocaweb.onrender.com
+#
+# The free plan sleeps after 15 minutes without traffic. Change `plan` to
+# `starter` for an always-on service.
 services:
   - type: web
-    name: theo-api
+    name: vocaweb-api
     runtime: node
     region: oregon
-    plan: starter
+    plan: free
     branch: main
     buildCommand: >-
       corepack enable &&
       corepack prepare pnpm@10.12.1 --activate &&
       pnpm install --frozen-lockfile --prod=false
-    startCommand: >-
-      corepack enable &&
-      pnpm --filter @theo/api exec tsx src/server.ts
+    startCommand: pnpm --filter @theo/api exec tsx src/server.ts
     healthCheckPath: /health
     envVars:
-      - key: NODE_ENV
-        value: production
+      - key: NODE_VERSION
+        value: "22"
       - key: COREPACK_ENABLE_STRICT
         value: "0"
       - key: DATABASE_URL
         sync: false
+      # Optional. Only the conversation cache uses Redis.
       - key: REDIS_URL
         sync: false
       # Sign-in
@@ -30,7 +36,7 @@ services:
       - key: CLERK_JWT_KEY
         sync: false
       - key: CLERK_AUTHORIZED_PARTIES
-        sync: false
+        value: https://vocaweb.onrender.com
       # AI: one key for every model
       - key: AI_GATEWAY_API_KEY
         sync: false
@@ -44,13 +50,15 @@ services:
       - key: DEPLOY_BASE_DOMAIN
         sync: false
       - key: WEB_APP_URL
-        sync: false
+        value: https://vocaweb.onrender.com
       - key: CORS_ALLOWED_ORIGINS
         sync: false
       # Integrations
       - key: INTEGRATIONS_CALLBACK_BASE
-        sync: false
+        value: https://vocaweb-api.onrender.com
       - key: INTEGRATION_TOKEN_SECRET
+        sync: false
+      - key: JWT_SECRET
         sync: false
       - key: INTEGRATIONS_MCP_ENABLED
         value: "true"
@@ -67,4 +75,36 @@ services:
       - key: FIGMA_CLIENT_SECRET
         sync: false
       - key: CANVA_MCP_CLIENT_ID_URL
+        sync: false
+
+  - type: web
+    name: vocaweb
+    runtime: node
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: >-
+      corepack enable &&
+      corepack prepare pnpm@10.12.1 --activate &&
+      pnpm install --frozen-lockfile --prod=false &&
+      pnpm --filter @theo/dashboard build
+    startCommand: pnpm --filter @theo/dashboard start
+    healthCheckPath: /sign-in
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: COREPACK_ENABLE_STRICT
+        value: "0"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # NEXT_PUBLIC_* values are read at build time; redeploy after changing them.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://vocaweb-api.onrender.com/api
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://vocaweb.onrender.com
+      - key: NEXT_PUBLIC_DEPLOY_BASE_DOMAIN
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
         sync: false
