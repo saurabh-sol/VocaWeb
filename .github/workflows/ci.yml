@@ -6,8 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Clerk needs a well-formed publishable key to build. This one points at no real
+  # instance; set the repository variable to build against your own.
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || 'pk_test_Y2kuY2xlcmsuYWNjb3VudHMuZGV2JA==' }}
+
 jobs:
-  lint-and-typecheck:
+  check:
+    name: Typecheck, lint and test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +22,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -27,9 +33,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Test
+        run: pnpm test
+
   build:
     runs-on: ubuntu-latest
-    needs: lint-and-typecheck
+    needs: check
     steps:
       - uses: actions/checkout@v4
 
@@ -37,7 +46,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
