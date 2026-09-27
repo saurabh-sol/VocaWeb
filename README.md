@@ -1,17 +1,33 @@
 # VocaWeb
 
-**Build websites by talking or typing.** VocaWeb is an AI-powered website builder — describe what you want in chat or voice, watch it build live, then publish to the web in one click.
+**Build websites by talking or typing.** Describe the site in chat or out loud, approve the plan, watch a live preview and publish it to the web.
 
 ## Architecture
 
 | App | Path | Default port | Deploy target |
 |-----|------|--------------|---------------|
-| **Dashboard** | `apps/dashboard` | 3002 | Vercel (`app.yourdomain.com`) |
-| **API** | `apps/api` | 3001 | Render (`api.yourdomain.com`) |
+| **Dashboard** | `apps/dashboard` | 3002 | Vercel |
+| **API** | `apps/api` | 3001 | Render |
 
 Shared packages live under `packages/` (`ai`, `db`, `shared`, `voice`).
 
-User-published sites deploy to Vercel as `{slug}.yourdomain.com` via the API deploy pipeline.
+| Concern | How it works |
+|---------|--------------|
+| Sign-in | Clerk, with Google and GitHub |
+| AI | Every model call goes through the Vercel AI Gateway from the API. The browser never sees the key. |
+| Usage | Each account gets a daily build allowance (`FREE_DAILY_BUILDS`, default 10) |
+| Publishing | User sites deploy to Vercel as `{slug}.yourdomain.com` |
+
+### Models
+
+| Task | Model | Falls back to |
+|------|-------|---------------|
+| Website generation, edits | `google/gemini-2.5-flash` | `openai/gpt-5.5`, `anthropic/claude-sonnet-4.6` |
+| Debugging and fixes | `anthropic/claude-sonnet-4.6` | `google/gemini-2.5-flash` |
+| Chat and planning | `openai/gpt-5.5` | `anthropic/claude-sonnet-4.6` |
+| Images | `openai/gpt-image-1` | none |
+
+Realtime voice talks to xAI directly.
 
 ## Prerequisites
 
@@ -19,72 +35,68 @@ User-published sites deploy to Vercel as `{slug}.yourdomain.com` via the API dep
 - **pnpm** 10+ (`corepack enable`)
 - **PostgreSQL** (Neon recommended)
 - **Redis**
+- A **Clerk** application with Google and GitHub enabled
+- A **Vercel AI Gateway** API key with credit
 
 ## Quick start
 
 ```bash
-# Install dependencies
 pnpm install
 
-# Copy env template and fill in secrets
+# API environment
 cp .env.example .env
-# Dashboard local env
-cp apps/dashboard/.env.example apps/dashboard/.env.local 2>/dev/null || true
 
-# Run API + dashboard (from repo root)
+# Dashboard environment
+cp apps/dashboard/.env.example apps/dashboard/.env.local
+
+pnpm db:migrate
 pnpm dev
 ```
 
-- Dashboard: http://localhost:3002  
-- API: http://localhost:3001  
+- Dashboard: http://localhost:3002
+- API: http://localhost:3001
 
-## Environment variables
+### Setting up Clerk
 
-See [`.env.example`](.env.example) for the full API template.
+1. Create an application at https://dashboard.clerk.com.
+2. Under **SSO connections**, enable **Google** and **GitHub** and turn the other sign-in methods off.
+3. Copy the publishable key and the secret key from **API keys**:
+   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in `apps/dashboard/.env.local`
+   - `CLERK_SECRET_KEY` in `.env` for the API
+4. For production, add your own Google and GitHub OAuth credentials in Clerk. Development instances use shared ones.
 
-**Dashboard** (`apps/dashboard/.env.local`):
+### Setting up the AI Gateway
 
-```env
-NEXT_PUBLIC_PRIVY_APP_ID=
-NEXT_PUBLIC_API_URL=http://localhost:3001/api
-NEXT_PUBLIC_APP_URL=http://localhost:3002
-NEXT_PUBLIC_DEPLOY_BASE_DOMAIN=drooper.xyz
-```
+1. Create a key at https://vercel.com/dashboard/ai-gateway and add credit.
+2. Set `AI_GATEWAY_API_KEY` in `.env` for the API only.
 
-**API (Render / production)** — minimum:
+## Pages
 
-```env
-DATABASE_URL=
-REDIS_URL=
-NEXT_PUBLIC_PRIVY_APP_ID=
-PRIVY_APP_SECRET=
-VERCEL_TOKEN=
-DEPLOY_BASE_DOMAIN=drooper.xyz
-WEB_APP_URL=https://app.yourdomain.com
-INTEGRATIONS_CALLBACK_BASE=https://api.yourdomain.com
-```
+| Path | What it is |
+|------|------------|
+| `/` | Landing page |
+| `/sign-in`, `/sign-up` | Google and GitHub sign-in. The form sits on the right for sign-in and on the left for sign-up. |
+| `/app` | Builder: chat, voice, projects and the sandbox |
+| `/app/chat-history` | Past chat and voice sessions |
+| `/app/settings` | Account, usage, integrations and appearance |
 
-## Features
+## Design system
 
-- **Chat & voice builder** — plan and generate sites with AI (v1 HTML, v2 React/Vite, v3 Next.js tiers)
-- **Live sandbox** — preview, edit code, click-to-select elements
-- **One-click publish** — deploy to Vercel with stable `*.vercel.app` URLs + optional custom subdomains
-- **Integrations** — Notion, Figma, Canva import via OAuth
-- **Wallet auth** — Privy + Solana (Phantom, Solflare, Backpack)
+The look is a "paper ledger": warm paper, ink rules, hard offset shadows, Space Grotesk for headings, Inter for text and IBM Plex Mono for labels. Tokens for light and dark live in `apps/dashboard/src/app/globals.css`, and the building blocks are in `apps/dashboard/src/components/ui`.
 
 ## Project structure
 
 ```
 apps/
-  api/          Fastify backend (AI, deploy, auth, integrations)
-  dashboard/    Next.js app (UI)
+  api/          Fastify backend (AI, publishing, sign-in checks, integrations)
+  dashboard/    Next.js app (landing page and builder)
 packages/
-  ai/           LLM providers, skills loader
-  db/           Postgres repositories
-  shared/       Shared types & schemas
+  ai/           AI Gateway provider, model routing, skills loader
+  db/           Postgres repositories and migrations
+  shared/       Shared types and schemas
   voice/        Voice agent tools
 skills/         AI skill markdown files
-docs/           MCP & integration docs
+docs/           MCP and integration docs
 ```
 
 ## SDK folders (not in this repo)
@@ -96,8 +108,6 @@ Local SDK packages are **gitignored** and kept on your machine only:
 - `Vocaweb_sdk_python/`
 - `Vocaweb_sdk_typescript/`
 
-Use them separately if you need programmatic API access.
-
 ## Scripts
 
 | Command | Description |
@@ -106,15 +116,17 @@ Use them separately if you need programmatic API access.
 | `pnpm build` | Build all packages |
 | `pnpm lint` | Lint workspace |
 | `pnpm typecheck` | Typecheck workspace |
+| `pnpm test` | Run tests |
 | `pnpm db:migrate` | Run database migrations |
 
 ## Deployment
 
-1. **API** → Render (see `render.yaml` blueprint)
-2. **Dashboard** → Vercel, root directory `apps/dashboard`
-3. **DNS** — point `api.*` to Render, `app.*` to Vercel; wildcard `*` for user sites on Vercel
-4. Register OAuth redirect URIs on Notion/Figma/Canva pointing to `https://api.yourdomain.com/api/integrations/.../callback`
+1. **API** on Render (see the `render.yaml` blueprint). Set every variable marked `sync: false`.
+2. **Dashboard** on Vercel, root directory `apps/dashboard`, with the variables from `apps/dashboard/.env.example`.
+3. **DNS**: point `api.*` to Render and `app.*` to Vercel, with a wildcard `*` for user sites on Vercel.
+4. Set `WEB_APP_URL` on the API to the dashboard's address so sign-in tokens and CORS are accepted.
+5. Register the OAuth redirect URIs for Notion, Figma and Canva as `https://api.yourdomain.com/api/integrations/{provider}/callback`.
 
 ## License
 
-Private — All rights reserved.
+Private. All rights reserved.
