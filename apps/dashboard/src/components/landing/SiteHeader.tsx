@@ -7,7 +7,7 @@ import { Menu, X } from 'lucide-react';
 import { Brand } from '@/components/ui/brand';
 import { ButtonLink } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { APP_HOME, SIGN_IN_PATH } from '@/lib/routes';
+import { APP_HOME, SIGN_IN_PATH, SIGN_UP_PATH } from '@/lib/routes';
 
 const LINKS = [
   { href: '#how', label: 'How it works' },
@@ -48,7 +48,7 @@ export function SiteHeader() {
               <ButtonLink href={SIGN_IN_PATH} variant="ghost" size="sm">
                 Sign in
               </ButtonLink>
-              <ButtonLink href={APP_HOME} hard variant="primary" size="sm">
+              <ButtonLink href={SIGN_UP_PATH} hard variant="primary" size="sm">
                 Start building
               </ButtonLink>
             </>
@@ -103,7 +103,7 @@ export function SiteHeader() {
                   </ButtonLink>
                 ) : (
                   <>
-                    <ButtonLink href={APP_HOME} hard variant="primary">
+                    <ButtonLink href={SIGN_UP_PATH} hard variant="primary">
                       Start building
                     </ButtonLink>
                     <ButtonLink href={SIGN_IN_PATH}>Sign in</ButtonLink>

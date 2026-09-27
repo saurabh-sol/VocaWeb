@@ -80,24 +80,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ClerkProvider
-      appearance={clerkAppearance}
-      signInUrl={SIGN_IN_PATH}
-      signUpUrl={SIGN_UP_PATH}
-      signInFallbackRedirectUrl={APP_HOME}
-      signUpFallbackRedirectUrl={APP_HOME}
-      afterSignOutUrl="/"
+    // Font variables sit on <html> so the theme tokens that reference them resolve at the root.
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${grotesk.variable} ${plexMono.variable}`}
     >
-      {/* Font variables sit on <html> so the theme tokens that reference them resolve at the root. */}
-      <html
-        lang="en"
-        suppressHydrationWarning
-        className={`${inter.variable} ${grotesk.variable} ${plexMono.variable}`}
-      >
-        <body className="min-h-[100dvh] font-sans antialiased">
+      <body className="min-h-[100dvh] font-sans antialiased">
+        <ClerkProvider
+          appearance={clerkAppearance}
+          signInUrl={SIGN_IN_PATH}
+          signUpUrl={SIGN_UP_PATH}
+          signInFallbackRedirectUrl={APP_HOME}
+          signUpFallbackRedirectUrl={APP_HOME}
+          afterSignOutUrl="/"
+        >
           <Providers>{children}</Providers>
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }
