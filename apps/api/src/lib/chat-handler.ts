@@ -1,16 +1,9 @@
-import { OpenAiProvider, AnthropicProvider, extractJsonObject } from '@theo/ai';
+import { GatewayProvider, extractJsonObject, modelRouter } from '@theo/ai';
 import { getChatSkills, formatSkillsAsContext, setSkillsDir } from '@theo/ai';
 import { chatStructuredResponseSchema } from '@theo/shared';
-import {
-  getCodexKey,
-  getCodexBaseUrl,
-  getCodexModel,
-  getAnthropicKey,
-  getAnthropicBaseUrl,
-  getOpenAiKey,
-} from './ai-keys.js';
+import { getGatewayKey } from './ai-keys.js';
 import { PLATFORM_LIMITS, PLATFORM_LIMITS_HTML, tierToFramework } from './prompts.js';
-import type { ModelTier } from './token-gate.js';
+import type { ModelTier } from './model-tier.js';
 import { join } from 'path';
 import {
   isStandaloneImageRequest,
@@ -99,7 +92,7 @@ function buildChatSystemBase(tier: ModelTier): string {
   const { framework, limits, forbidden } = tierPlanInstructions(tier);
   const forbiddenBlock = forbidden ? `\n   - ${forbidden}` : '';
 
-  return `You are Vocaweb, a senior AI design engineer who builds websites. You operate in PLAN mode and BUILD mode.
+  return `You are VocaWeb, a senior AI design engineer who builds websites. You operate in PLAN mode and BUILD mode.
 
 ACTIVE MODEL TIER: ${tier}
 All build plans MUST use this tier's framework — do not plan for a different stack.
@@ -132,10 +125,10 @@ HOW TO RESPOND — follow these rules strictly:
    Update the plan and return intent=plan_ready with the revised plan. Reference what stays the same.
 
 6. GENERAL QUESTIONS
-   Answer helpfully and directly about features, pricing, how Vocaweb works, etc.
+   Answer helpfully and directly about features, pricing, how VocaWeb works, etc.
 
-7. IMAGES — Vocaweb CAN generate real images
-   - During website builds, Vocaweb automatically generates custom AI images via OpenAI.
+7. IMAGES — VocaWeb CAN generate real images
+   - During website builds, VocaWeb automatically generates custom AI images.
    - NEVER say you cannot generate images.
    - Standalone image requests: intent=generate_image with imagePrompt set.
 
@@ -165,16 +158,20 @@ async function callChatProvider(
   systemPrompt: string,
   messages: ChatMessage[],
 ): Promise<{ content: string }> {
+  const routing = modelRouter('chat');
+  const apiKey = getGatewayKey();
+
   try {
-    const provider = new OpenAiProvider(getCodexKey(), getCodexModel(), getCodexBaseUrl());
+    const provider = new GatewayProvider(apiKey, routing.model);
     const result = await provider.chat(systemPrompt, messages, { jsonMode: true });
     return { content: result.content };
   } catch (err) {
-    console.error('[chat-handler] Codex failed, falling back to Anthropic:', err);
+    if (!routing.fallback) throw err;
+    console.error(`[chat-handler] ${routing.model} failed, falling back to ${routing.fallback}:`, err);
   }
 
-  const provider = new AnthropicProvider(getAnthropicKey(), 'claude-sonnet-4-6', getAnthropicBaseUrl());
-  const result = await provider.call(systemPrompt, messages);
+  const provider = new GatewayProvider(apiKey, routing.fallback);
+  const result = await provider.chat(systemPrompt, messages, { jsonMode: true });
   return { content: result.content };
 }
 
@@ -275,23 +272,23 @@ export async function handleImageGeneration(userMessage: string): Promise<ChatRe
   if (!isStandaloneImageRequest(userMessage)) return null;
 
   const imagePrompt = extractImagePrompt(userMessage);
-  const b64 = await generateSingleImage(imagePrompt, getOpenAiKey());
+  const b64 = await generateSingleImage(imagePrompt);
 
   if (!b64) {
     return {
       intent: 'generate_image',
       reply:
-        "I couldn't generate that image right now. Please check that OPENAI_API_KEY is configured, then try again.",
+        "I couldn't generate that image right now. Please try again in a moment.",
       shouldBuild: false,
     };
   }
 
   const dataUrl = `data:image/jpeg;base64,${b64}`;
-  const label = imagePrompt.length > 60 ? `${imagePrompt.slice(0, 60)}…` : imagePrompt;
+  const label = imagePrompt.length > 60 ? `${imagePrompt.slice(0, 60)}...` : imagePrompt;
 
   return {
     intent: 'generate_image',
-    reply: `Here's your image: ${label}. Want me to build this into a full website with more visuals? Just say the word!`,
+    reply: `Here's your image: ${label}. Want me to build it into a full website?`,
     shouldBuild: false,
     images: [dataUrl],
   };

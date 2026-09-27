@@ -165,6 +165,21 @@ export async function getProjectDeployments(projectId: string) {
   `;
 }
 
+export interface AuthUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  image: string | null;
+}
+
+/** Looks a user up by the id their sign-in provider gave them. */
+export async function findUserByExternalId(externalId: string): Promise<AuthUserRecord | null> {
+  const rows = await sql`
+    SELECT id, email, name, image FROM users WHERE clerk_user_id = ${externalId}
+  `;
+  return (rows[0] as AuthUserRecord) ?? null;
+}
+
 export async function findOrCreateUser(
   clerkUserId: string,
   email: string,

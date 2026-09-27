@@ -3,7 +3,7 @@ import WebSocket from 'ws';
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getAuthUser, requireAuthUser } from '../lib/privy-auth.js';
+import { getAuthUser, requireAuthUser } from '../lib/auth.js';
 import {
   startVoiceSessionDb,
   persistVoiceTranscriptDb,

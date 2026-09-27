@@ -8,7 +8,7 @@ import {
   persistProjectToDb,
   loadProjectFromDb,
 } from '../lib/project-manager.js';
-import { requireAuthUser, getAuthUser } from '../lib/privy-auth.js';
+import { requireAuthUser, getAuthUser } from '../lib/auth.js';
 import {
   getUserProjects,
   getProject,

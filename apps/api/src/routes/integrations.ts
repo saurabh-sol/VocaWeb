@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuthUser, getAuthUser } from '../lib/privy-auth.js';
+import { requireAuthUser, getAuthUser } from '../lib/auth.js';
 import {
   listUserIntegrations,
   deleteUserIntegration,
@@ -49,7 +49,7 @@ import {
   mergeImportBundleIntoDescription,
 } from '../lib/import-pipeline.js';
 import { buildProjectFromDescription } from '../lib/build-helper.js';
-import type { ModelTier } from '../lib/token-gate.js';
+import type { ModelTier } from '../lib/model-tier.js';
 
 const PROVIDERS: IntegrationProvider[] = ['notion', 'canva', 'figma'];
 
@@ -96,7 +96,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     }
 
     const redirectAfter =
-      (request.query as { redirect?: string }).redirect ?? `${getWebRedirectBase()}/settings`;
+      (request.query as { redirect?: string }).redirect ?? `${getWebRedirectBase()}/app/settings`;
 
     let authUrl: string;
     if (provider === 'canva') {
@@ -124,12 +124,12 @@ export async function integrationRoutes(app: FastifyInstance) {
 
     const redirectBase = getWebRedirectBase();
     if (error || !code || !state) {
-      return reply.redirect(`${redirectBase}/settings?integration=error`);
+      return reply.redirect(`${redirectBase}/app/settings?integration=error`);
     }
 
     const pending = consumeOAuthState(state);
     if (!pending || pending.provider !== provider) {
-      return reply.redirect(`${redirectBase}/settings?integration=invalid_state`);
+      return reply.redirect(`${redirectBase}/app/settings?integration=invalid_state`);
     }
 
     try {
@@ -139,11 +139,11 @@ export async function integrationRoutes(app: FastifyInstance) {
         await saveCanvaIntegration(pending.userId, code, pending.codeVerifier);
       } else await saveFigmaIntegration(pending.userId, code);
 
-      const dest = pending.redirectAfter ?? `${redirectBase}/settings`;
+      const dest = pending.redirectAfter ?? `${redirectBase}/app/settings`;
       return reply.redirect(`${dest}?integration=connected&provider=${provider}`);
     } catch (err) {
       app.log.error(err, 'Integration OAuth callback failed');
-      return reply.redirect(`${redirectBase}/settings?integration=error&provider=${provider}`);
+      return reply.redirect(`${redirectBase}/app/settings?integration=error&provider=${provider}`);
     }
   });
 
@@ -245,7 +245,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     }
 
     const redirectAfter =
-      (request.query as { redirect?: string }).redirect ?? `${getWebRedirectBase()}/settings`;
+      (request.query as { redirect?: string }).redirect ?? `${getWebRedirectBase()}/app/settings`;
 
     const state = createCanvaMcpOAuthState(user.userId, redirectAfter);
     const authUrl = getCanvaMcpAuthUrl(state);
@@ -261,16 +261,16 @@ export async function integrationRoutes(app: FastifyInstance) {
 
     const redirectBase = getWebRedirectBase();
     if (error || !code || !state) {
-      return reply.redirect(`${redirectBase}/settings?integration=mcp_error&provider=canva`);
+      return reply.redirect(`${redirectBase}/app/settings?integration=mcp_error&provider=canva`);
     }
 
     try {
       const result = await completeCanvaMcpOAuth(state, code);
-      const dest = result.redirectAfter ?? `${redirectBase}/settings`;
+      const dest = result.redirectAfter ?? `${redirectBase}/app/settings`;
       return reply.redirect(`${dest}?integration=mcp_connected&provider=canva`);
     } catch (err) {
       app.log.error(err, 'Canva MCP OAuth callback failed');
-      return reply.redirect(`${redirectBase}/settings?integration=mcp_error&provider=canva`);
+      return reply.redirect(`${redirectBase}/app/settings?integration=mcp_error&provider=canva`);
     }
   });
 

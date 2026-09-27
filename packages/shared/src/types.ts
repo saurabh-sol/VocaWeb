@@ -5,7 +5,7 @@ export type DeploymentStatus = 'queued' | 'building' | 'ready' | 'error' | 'canc
 export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed';
 export type JobType = 'generate' | 'edit' | 'fix' | 'deploy';
 export type VoiceId = 'eve' | 'ara' | 'rex' | 'sal' | 'leo';
-export type AiModel = 'claude-sonnet-4-6' | 'claude-opus-4-8' | 'gemini-3.5-flash' | 'gemini-3.5-pro';
+export type AiModel = 'gemini-2.5-flash' | 'claude-sonnet-4-6' | 'gpt-5.5';
 
 export interface Project {
   id: string;

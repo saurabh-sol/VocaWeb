@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { getProjectFileTree } from '../lib/project-manager.js';
 import { generatePreviewHtml } from '../lib/preview-manager.js';
-import { getAuthUser } from '../lib/privy-auth.js';
+import { getAuthUser } from '../lib/auth.js';
 import { getProject } from '@theo/db';
 
 export async function previewRoutes(app: FastifyInstance) {

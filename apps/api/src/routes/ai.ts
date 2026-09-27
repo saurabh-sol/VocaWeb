@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { getProjectFileTree, persistProjectToDb } from '../lib/project-manager.js';
 import { getAllSkillFilenames } from '@theo/ai';
 import { handleChat, handleImageGeneration } from '../lib/chat-handler.js';
-import { getAuthUser, requireAuthUser } from '../lib/privy-auth.js';
+import { isStandaloneImageRequest } from '../lib/image-generator.js';
+import { getAuthUser, requireAuthUser } from '../lib/auth.js';
 import { executeVoiceAction } from '../lib/voice-action.js';
 import { buildProjectFromDescription, fixProjectError } from '../lib/build-helper.js';
 import { autoFixBuildError } from '../lib/build-verifier.js';
@@ -13,8 +14,40 @@ import {
   extractPlanFromMessages,
 } from '../lib/conversation-context.js';
 import { runAgenticCodegen } from '../lib/agent-loop.js';
-import { verifyModelAccess, type ModelTier } from '../lib/token-gate.js';
+import { checkTier, type ModelTier, type TierCheck } from '../lib/model-tier.js';
+import { reserveBuild, UsageLimitError } from '../lib/usage.js';
+import { toGatewayModelId, GATEWAY_BASE_URL } from '@theo/ai';
+import { getGatewayKey, hasGatewayKey } from '../lib/ai-keys.js';
 import { getProject } from '@theo/db';
+
+function sendTierDenied(reply: FastifyReply, check: TierCheck) {
+  return reply.status(403).send({
+    error: 'access_denied',
+    message: check.message,
+    tier: check.tier,
+  });
+}
+
+function sendLimitReached(reply: FastifyReply, err: UsageLimitError) {
+  return reply.status(429).send({
+    error: 'limit_reached',
+    message: err.message,
+    usage: err.usage,
+  });
+}
+
+/** Takes one build from the allowance, or answers 429 and returns null. */
+async function reserveOrReply(userId: string, reply: FastifyReply) {
+  try {
+    return await reserveBuild(userId);
+  } catch (err) {
+    if (err instanceof UsageLimitError) {
+      sendLimitReached(reply, err);
+      return null;
+    }
+    throw err;
+  }
+}
 
 export async function aiRoutes(app: FastifyInstance) {
   const aiRateConfig = {
@@ -24,12 +57,11 @@ export async function aiRoutes(app: FastifyInstance) {
   };
 
   app.post('/chat', aiRateConfig, async (request, reply) => {
-    const { messages, sessionId, projectId, model, walletAddress } = request.body as {
+    const { messages, sessionId, projectId, model } = request.body as {
       messages: { role: 'user' | 'assistant'; content: string }[];
       sessionId?: string;
       projectId?: string;
       model?: ModelTier;
-      walletAddress?: string;
     };
 
     if (!messages?.length) return reply.status(400).send({ error: 'messages array is required' });
@@ -41,21 +73,11 @@ export async function aiRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Authentication required' });
     }
 
-    const requestedTier: ModelTier = model ?? 'v1';
-    const gateResult = await verifyModelAccess(
-      walletAddress ?? null,
-      requestedTier,
-      authUser.userId,
-    );
+    const tierCheck = checkTier(model);
+    if (!tierCheck.eligible) return sendTierDenied(reply, tierCheck);
+    const requestedTier = tierCheck.tier;
 
-    if (!gateResult.eligible) {
-      return reply.status(403).send({
-        error: 'access_denied',
-        message: gateResult.message,
-        tier: gateResult.tier,
-        balance: gateResult.balance,
-      });
-    }
+    let refund: (() => Promise<void>) | null = null;
 
     try {
       const lastUser = messages.filter((m) => m.role === 'user').pop();
@@ -72,9 +94,12 @@ export async function aiRoutes(app: FastifyInstance) {
         );
       }
 
-      // Standalone image requests — generate directly via OpenAI
-      if (lastUser?.content) {
+      // Standalone image requests are generated straight away and count as one build.
+      if (lastUser?.content && isStandaloneImageRequest(lastUser.content)) {
+        refund = await reserveOrReply(authUser.userId, reply);
+        if (!refund) return reply;
         const imageResult = await handleImageGeneration(lastUser.content);
+        if (imageResult && !imageResult.images?.length) await refund();
         if (imageResult) {
           if (authUser && dbSessionId) {
             await persistChatMessage(
@@ -131,6 +156,9 @@ export async function aiRoutes(app: FastifyInstance) {
       }
 
       if (chatResult.shouldBuild) {
+        refund = await reserveOrReply(authUser.userId, reply);
+        if (!refund) return reply;
+
         const confirmedPlan = chatResult.plan ?? extractPlanFromMessages(messages);
         const buildDescription = buildStructuredBuildDescription(messages, confirmedPlan);
 
@@ -176,6 +204,7 @@ export async function aiRoutes(app: FastifyInstance) {
         images: chatResult.images,
       };
     } catch (err) {
+      await refund?.();
       app.log.error(err, 'Chat failed');
       const message = err instanceof Error ? err.message : 'Chat failed';
       return reply.status(500).send({ error: message });
@@ -215,18 +244,12 @@ export async function aiRoutes(app: FastifyInstance) {
       }
     }
 
-    const buildTier: ModelTier = model ?? 'v1';
-    const gateResult = await verifyModelAccess(null, buildTier, authUser.userId);
-    if (!gateResult.eligible) {
-      return reply.status(403).send({
-        error: 'access_denied',
-        message: gateResult.message,
-        tier: gateResult.tier,
-        balance: gateResult.balance,
-      });
-    }
-    if (buildTier === 'v1') {
-    }
+    const tierCheck = checkTier(model);
+    if (!tierCheck.eligible) return sendTierDenied(reply, tierCheck);
+    const buildTier = tierCheck.tier;
+
+    const refund = await reserveOrReply(authUser.userId, reply);
+    if (!refund) return reply;
 
     let dbSessionId = sessionId ?? null;
 
@@ -252,8 +275,7 @@ export async function aiRoutes(app: FastifyInstance) {
         confirmedPlan,
       });
 
-      const buildReply =
-        'Building your site — watch the live preview update. Your website is ready!';
+      const buildReply = 'Your website is ready. The live preview is open.';
 
       if (authUser && dbSessionId) {
         await persistChatMessage(
@@ -285,6 +307,7 @@ export async function aiRoutes(app: FastifyInstance) {
         },
       };
     } catch (err) {
+      await refund();
       app.log.error(err, 'Direct build failed');
       const message = err instanceof Error ? err.message : 'Build failed';
       return reply.status(500).send({ error: message });
@@ -293,13 +316,12 @@ export async function aiRoutes(app: FastifyInstance) {
 
   /** SSE stream — emits progress then file events */
   app.post('/generate/stream', aiRateConfig, async (request, reply) => {
-    const { description, projectId, channel = 'chat', sessionId, model, walletAddress } = request.body as {
+    const { description, projectId, channel = 'chat', sessionId, model } = request.body as {
       description: string;
       projectId?: string;
       channel?: 'chat' | 'voice';
       sessionId?: string;
       model?: ModelTier;
-      walletAddress?: string;
     };
 
     if (!description?.trim()) {
@@ -320,28 +342,19 @@ export async function aiRoutes(app: FastifyInstance) {
       }
     }
 
-    const requestedTier: ModelTier = model ?? 'v1';
-    const gateResult = await verifyModelAccess(
-      walletAddress ?? null,
-      requestedTier,
-      authUser.userId,
-    );
+    const tierCheck = checkTier(model);
+    if (!tierCheck.eligible) return sendTierDenied(reply, tierCheck);
+    const requestedTier = tierCheck.tier;
 
-    if (!gateResult.eligible) {
-      return reply.status(403).send({
-        error: 'access_denied',
-        message: gateResult.message,
-        tier: gateResult.tier,
-        balance: gateResult.balance,
-      });
-    }
-
-    if (requestedTier === 'v1') {
-    }
+    const refund = await reserveOrReply(authUser.userId, reply);
+    if (!refund) return reply;
 
     let dbSessionId = sessionId ?? null;
 
-    if (!writeSseHeaders(request, reply)) return;
+    if (!writeSseHeaders(request, reply)) {
+      await refund();
+      return;
+    }
 
     try {
       if (authUser) {
@@ -391,6 +404,8 @@ export async function aiRoutes(app: FastifyInstance) {
         sessionId: dbSessionId,
       });
     } catch (err) {
+      await refund();
+      app.log.error(err, 'Streamed build failed');
       const message = err instanceof Error ? err.message : 'Stream failed';
       sendSseEvent(reply, 'error', { message });
     }
@@ -399,13 +414,12 @@ export async function aiRoutes(app: FastifyInstance) {
   });
 
   app.post('/voice/action', aiRateConfig, async (request, reply) => {
-    const { tool, args, projectId, transcript, model, walletAddress } = request.body as {
+    const { tool, args, projectId, transcript, model } = request.body as {
       tool: string;
       args?: Record<string, unknown>;
       projectId?: string;
       transcript?: string;
       model?: ModelTier;
-      walletAddress?: string;
     };
 
     if (!tool) {
@@ -426,23 +440,19 @@ export async function aiRoutes(app: FastifyInstance) {
       }
     }
 
-    const requestedTier: ModelTier = model ?? 'v1';
-    const gateResult = await verifyModelAccess(
-      walletAddress ?? null,
-      requestedTier,
-      authUser.userId,
-    );
+    const tierCheck = checkTier(model);
+    if (!tierCheck.eligible) return sendTierDenied(reply, tierCheck);
+    const requestedTier = tierCheck.tier;
 
-    if (!gateResult.eligible) {
-      return reply.status(403).send({
-        error: 'access_denied',
-        message: gateResult.message,
-        tier: gateResult.tier,
-        balance: gateResult.balance,
-      });
-    }
-
-    if (requestedTier === 'v1') {
+    let refund: (() => Promise<void>) | null = null;
+    try {
+      refund = await reserveBuild(authUser.userId);
+    } catch (err) {
+      if (err instanceof UsageLimitError) {
+        // Voice reads this message back to the user, so keep the normal response shape.
+        return { success: false, message: err.message };
+      }
+      throw err;
     }
 
     try {
@@ -454,8 +464,10 @@ export async function aiRoutes(app: FastifyInstance) {
         userId: authUser.userId,
         modelTier: requestedTier,
       });
+      if (!result.success) await refund();
       return result;
     } catch (err) {
+      await refund();
       app.log.error(err, 'Voice action failed');
       const message = err instanceof Error ? err.message : 'Voice action failed';
       return reply.status(500).send({
@@ -543,20 +555,16 @@ export async function aiRoutes(app: FastifyInstance) {
       }
     }
 
-    const genGateResult = await verifyModelAccess(null, 'v1', authUser.userId);
-    if (!genGateResult.eligible) {
-      return reply.status(403).send({
-        error: 'access_denied',
-        message: genGateResult.message,
-        tier: genGateResult.tier,
-        balance: genGateResult.balance,
-      });
-    }
+    const refund = await reserveOrReply(authUser.userId, reply);
+    if (!refund) return reply;
+
     try {
+      // Only v1 is open, so the requested framework is ignored in favour of the v1 stack.
+      void framework;
       const build = await buildProjectFromDescription(prompt, {
         userId: authUser.userId,
         projectId,
-        framework: framework ?? 'nextjs',
+        modelTier: 'v1',
         channel: 'chat',
       });
 
@@ -571,6 +579,7 @@ export async function aiRoutes(app: FastifyInstance) {
         files: build.files,
       };
     } catch (err) {
+      await refund();
       app.log.error(err, 'Generation failed');
       const message = err instanceof Error ? err.message : 'Generation failed';
       return reply.status(500).send({ error: message });
@@ -600,6 +609,9 @@ export async function aiRoutes(app: FastifyInstance) {
     if (project && project.user_id !== authUser.userId) {
       return reply.status(403).send({ error: 'You do not own this project' });
     }
+
+    const refund = await reserveOrReply(authUser.userId, reply);
+    if (!refund) return reply;
 
     try {
       let projectFiles = getProjectFileTree(projectId);
@@ -631,6 +643,7 @@ export async function aiRoutes(app: FastifyInstance) {
         files: result.files,
       };
     } catch (err) {
+      await refund();
       app.log.error(err, 'Edit failed');
       const message = err instanceof Error ? err.message : 'Edit failed';
       return reply.status(500).send({ error: message });
@@ -702,6 +715,9 @@ export async function aiRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'You do not own this project' });
     }
 
+    const refund = await reserveOrReply(authUser.userId, reply);
+    if (!refund) return reply;
+
     try {
       let projectFiles = getProjectFileTree(projectId);
       if (targetFiles?.length) {
@@ -732,6 +748,7 @@ export async function aiRoutes(app: FastifyInstance) {
         files: result.files,
       };
     } catch (err) {
+      await refund();
       app.log.error(err, 'UI improvement failed');
       const message = err instanceof Error ? err.message : 'UI improvement failed';
       return reply.status(500).send({ error: message });
@@ -742,33 +759,36 @@ export async function aiRoutes(app: FastifyInstance) {
     const { prompt } = request.body as { prompt: string };
     if (!prompt?.trim()) return reply.status(400).send({ error: 'prompt is required' });
 
+    let authUser;
     try {
-      await requireAuthUser(request);
+      authUser = await requireAuthUser(request);
     } catch {
       return reply.status(401).send({ error: 'Authentication required' });
     }
 
-    try {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) return reply.status(500).send({ error: 'OPENAI_API_KEY not set' });
+    const refund = await reserveOrReply(authUser.userId, reply);
+    if (!refund) return reply;
 
-      const response = await fetch('https://api.openai.com/v1/images/generations', {
+    try {
+      const response = await fetch(`${GATEWAY_BASE_URL}/images/generations`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${getGatewayKey()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-image-1',
+          model: toGatewayModelId('gpt-image-1'),
           prompt: prompt.trim(),
           n: 1,
           size: '1024x1024',
         }),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (!response.ok) {
-        const err = await response.text();
-        return reply.status(502).send({ error: `Image generation failed: ${err}` });
+        await refund();
+        app.log.error({ status: response.status, body: (await response.text()).slice(0, 300) }, 'Image generation failed');
+        return reply.status(502).send({ error: 'Image generation failed. Please try again.' });
       }
 
       const data = (await response.json()) as {
@@ -783,12 +803,16 @@ export async function aiRoutes(app: FastifyInstance) {
         imageUrl = item.url;
       }
 
-      if (!imageUrl) return reply.status(502).send({ error: 'No image returned' });
+      if (!imageUrl) {
+        await refund();
+        return reply.status(502).send({ error: 'No image returned' });
+      }
 
       return { imageUrl };
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Image generation failed';
-      return reply.status(500).send({ error: message });
+      await refund();
+      app.log.error(err, 'Image generation failed');
+      return reply.status(500).send({ error: 'Image generation failed. Please try again.' });
     }
   });
 
@@ -801,33 +825,16 @@ export async function aiRoutes(app: FastifyInstance) {
   });
 
   app.get('/providers', async () => {
-    const providers: { name: string; available: boolean; models: string[] }[] = [];
-
-    providers.push({
-      name: 'codex',
-      available: !!process.env.CODEX_API_KEY,
-      models: [process.env.CODEX_MODEL ?? 'gpt-5.5'],
-    });
-
-    providers.push({
-      name: 'anthropic',
-      available: !!process.env.ANTHROPIC_API_KEY,
-      models: ['claude-sonnet-4-6'],
-    });
-
-    providers.push({
-      name: 'google',
-      available: !!(process.env.ANTIGRAVITY_API_KEY ?? process.env.GEMINI_API_KEY),
-      models: ['gemini-2.5-flash'],
-    });
-
-    providers.push({
-      name: 'openai-images',
-      available: !!process.env.OPENAI_API_KEY,
-      models: ['gpt-image-1'],
-    });
-
-    return { providers };
+    const available = hasGatewayKey();
+    return {
+      gateway: 'vercel-ai-gateway',
+      providers: [
+        { name: 'google', available, models: ['gemini-2.5-flash'] },
+        { name: 'anthropic', available, models: ['claude-sonnet-4-6'] },
+        { name: 'openai', available, models: ['gpt-5.5'] },
+        { name: 'openai-images', available, models: ['gpt-image-1'] },
+      ],
+    };
   });
 
   app.get('/jobs/:id', async (_request, reply) => {

@@ -7,12 +7,11 @@ import {
   writeProjectFile,
 } from './project-manager.js';
 import { generateSiteImages, imagePathsForPrompt } from './image-generator.js';
-import { getOpenAiKey } from './ai-keys.js';
 import type { AiChannel } from './ai-keys.js';
 import { persistBuildLog } from './conversation-store.js';
 import type { ConversationTurn } from './conversation-context.js';
 import { tierToFramework, type BuildFramework } from './prompts.js';
-import type { ModelTier } from './token-gate.js';
+import type { ModelTier } from './model-tier.js';
 
 export interface BuildProjectResult {
   projectId: string;
@@ -69,7 +68,7 @@ export async function buildProjectFromDescription(
   let preGeneratedAssets: Record<string, string> = {};
   if (framework !== 'html') {
     try {
-      const imageB64 = await generateSiteImages(effectiveDescription, getOpenAiKey());
+      const imageB64 = await generateSiteImages(effectiveDescription);
       preGeneratedAssets = Object.fromEntries(
         imagePathsForPrompt(imageB64).map((p) => [p, 'generated']),
       );

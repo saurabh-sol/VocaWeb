@@ -1,7 +1,43 @@
+import { GATEWAY_BASE_URL, toGatewayModelId } from '@theo/ai';
+import { getGatewayKey } from './ai-keys.js';
+
+const IMAGE_MODEL = toGatewayModelId('gpt-image-1');
+
+type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
+
+/** One image through the AI Gateway, returned as base64. Null when nothing came back. */
+async function requestImage(prompt: string, size: ImageSize): Promise<string | null> {
+  const response = await fetch(`${GATEWAY_BASE_URL}/images/generations`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${getGatewayKey()}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model: IMAGE_MODEL, prompt, n: 1, size }),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Image request failed (${response.status}): ${(await response.text()).slice(0, 300)}`);
+  }
+
+  const data = (await response.json()) as {
+    data?: Array<{ b64_json?: string; url?: string }>;
+  };
+
+  const item = data.data?.[0];
+  if (item?.b64_json) return item.b64_json;
+  if (item?.url) {
+    const imageResponse = await fetch(item.url);
+    return Buffer.from(await imageResponse.arrayBuffer()).toString('base64');
+  }
+  return null;
+}
+
 export function buildImagePrompts(description: string): Array<{
   path: string;
   prompt: string;
-  size: '1024x1024' | '1536x1024' | '1024x1536';
+  size: ImageSize;
 }> {
   const base = description.slice(0, 400);
   return [
@@ -34,48 +70,15 @@ function needsImages(description: string): boolean {
 
 export async function generateSiteImages(
   description: string,
-  apiKey: string,
-  baseUrl = 'https://api.openai.com',
 ): Promise<Record<string, string>> {
   if (!needsImages(description)) return {};
 
-  const slots = buildImagePrompts(description);
   const files: Record<string, string> = {};
-  const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
 
-  for (const slot of slots) {
+  for (const slot of buildImagePrompts(description)) {
     try {
-      const response = await fetch(`${cleanBaseUrl}/v1/images/generations`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-image-1',
-          prompt: slot.prompt,
-          n: 1,
-          size: slot.size,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error(`Image gen failed for ${slot.path}:`, await response.text());
-        continue;
-      }
-
-      const data = (await response.json()) as {
-        data?: Array<{ b64_json?: string; url?: string }>;
-      };
-
-      const item = data.data?.[0];
-      if (item?.b64_json) {
-        files[slot.path] = item.b64_json;
-      } else if (item?.url) {
-        const imgRes = await fetch(item.url);
-        const buf = Buffer.from(await imgRes.arrayBuffer());
-        files[slot.path] = buf.toString('base64');
-      }
+      const b64 = await requestImage(slot.prompt, slot.size);
+      if (b64) files[slot.path] = b64;
     } catch (err) {
       console.error(`Image generation error for ${slot.path}:`, err);
     }
@@ -116,48 +119,14 @@ export function extractImagePrompt(text: string): string {
 }
 
 /** Generate a single image for chat responses */
-export async function generateSingleImage(
-  prompt: string,
-  apiKey: string,
-  baseUrl = 'https://api.openai.com',
-): Promise<string | null> {
-  const cleanBaseUrl = baseUrl.replace(/\/+$/, '');
-  const fullPrompt = `${prompt}. High quality, professional, no text overlay.`;
-
+export async function generateSingleImage(prompt: string): Promise<string | null> {
   try {
-    const response = await fetch(`${cleanBaseUrl}/v1/images/generations`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-image-1',
-        prompt: fullPrompt,
-        n: 1,
-        size: '1024x1024',
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('Single image gen failed:', await response.text());
-      return null;
-    }
-
-    const data = (await response.json()) as {
-      data?: Array<{ b64_json?: string; url?: string }>;
-    };
-
-    const item = data.data?.[0];
-    if (item?.b64_json) return item.b64_json;
-    if (item?.url) {
-      const imgRes = await fetch(item.url);
-      const buf = Buffer.from(await imgRes.arrayBuffer());
-      return buf.toString('base64');
-    }
+    return await requestImage(
+      `${prompt}. High quality, professional, no text overlay.`,
+      '1024x1024',
+    );
   } catch (err) {
     console.error('Single image generation error:', err);
+    return null;
   }
-
-  return null;
 }

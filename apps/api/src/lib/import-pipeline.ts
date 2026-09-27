@@ -10,7 +10,7 @@ import { importViaMcp } from './mcp/import-via-mcp.js';
 import { mergeMcpWarnings } from './mcp/mcp-to-bundle.js';
 import { createHash } from 'node:crypto';
 import { tierToFramework } from './prompts.js';
-import type { ModelTier } from './token-gate.js';
+import type { ModelTier } from './model-tier.js';
 
 function frameworkPlanLabel(modelTier?: ModelTier): string {
   switch (tierToFramework(modelTier ?? 'v1')) {

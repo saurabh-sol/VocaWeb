@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getAuthUser } from '../lib/privy-auth.js';
+import { getAuthUser } from '../lib/auth.js';
 
 export async function authRoutes(app: FastifyInstance) {
   app.get('/me', async (request, reply) => {

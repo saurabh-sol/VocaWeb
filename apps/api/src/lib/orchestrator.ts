@@ -1,9 +1,9 @@
 import { join } from 'path';
 import type { GenerationResult } from '@theo/shared';
 import {
-  AnthropicProvider,
-  GeminiProvider,
-  OpenAiProvider,
+  GatewayProvider,
+  GatewayError,
+  DEFAULT_MODELS,
   modelRouter,
   getSkillsForIntent,
   formatSkillsAsContext,
@@ -21,12 +21,7 @@ import {
   type BuildFramework,
 } from './prompts.js';
 import {
-  getAnthropicKey,
-  getAnthropicBaseUrl,
-  getGeminiKey,
-  getCodexKey,
-  getCodexBaseUrl,
-  getCodexModel,
+  getGatewayKey,
   getProviderForTask,
   type AiChannel,
   type AiProviderName,
@@ -69,54 +64,25 @@ const EDIT_INTENTS = new Set([
   'ui_improve',
 ]);
 
-function getProvider(
-  providerName: AiProviderName,
-  model?: string,
-): AiProvider {
-  switch (providerName) {
-    case 'codex': {
-      return new OpenAiProvider(getCodexKey(), model || getCodexModel(), getCodexBaseUrl());
-    }
-    case 'google': {
-      return new GeminiProvider(getGeminiKey(), model || 'gemini-2.5-flash');
-    }
-    case 'anthropic':
-    default: {
-      return new AnthropicProvider(getAnthropicKey(), model || 'claude-sonnet-4-6', getAnthropicBaseUrl());
-    }
-  }
-}
-
-function tryGetProvider(providerName: AiProviderName, model?: string): AiProvider | null {
-  try {
-    return getProvider(providerName, model);
-  } catch {
-    return null;
-  }
-}
-
 function getModelForProvider(providerName: AiProviderName, taskType: string): string {
   const routing = modelRouter(taskType);
-
   if (routing.provider === providerName && routing.model !== 'none') {
     return routing.model;
   }
-
-  switch (providerName) {
-    case 'codex':
-      return getCodexModel();
-    case 'google':
-      return 'gemini-2.5-flash';
-    case 'anthropic':
-      return 'claude-sonnet-4-6';
-    default:
-      return routing.model;
-  }
+  return DEFAULT_MODELS[providerName] ?? routing.model;
 }
 
-function getFallbackProviders(primary: AiProviderName): AiProviderName[] {
-  const routing: AiProviderName[] = ['codex', 'google', 'anthropic'];
-  return routing.filter((p) => p !== primary);
+/** The task's own fallback goes first, then whichever family is left. */
+function getFallbackProviders(primary: AiProviderName, taskType: string): AiProviderName[] {
+  const preferred = modelRouter(taskType).fallbackProvider;
+  const all: AiProviderName[] = ['google', 'anthropic', 'openai'];
+  const ordered = preferred ? [preferred, ...all.filter((p) => p !== preferred)] : all;
+  return ordered.filter((p) => p !== primary);
+}
+
+/** Bad key, no credit or no access: another model would fail the same way. */
+function isAccountError(err: unknown): boolean {
+  return err instanceof GatewayError && [401, 402, 403].includes(err.status);
 }
 
 async function callWithFallback(
@@ -124,32 +90,27 @@ async function callWithFallback(
   fn: (provider: AiProvider) => Promise<AiResponse>,
   preferredProvider: AiProviderName,
 ): Promise<{ response: AiResponse; providerUsed: string; modelUsed: string }> {
-  const primaryModel = getModelForProvider(preferredProvider, taskType);
+  const apiKey = getGatewayKey();
+  const candidates: AiProviderName[] = [
+    preferredProvider,
+    ...getFallbackProviders(preferredProvider, taskType),
+  ];
 
-  const primary = tryGetProvider(preferredProvider, primaryModel);
-  if (primary) {
+  for (const providerName of candidates) {
+    const model = getModelForProvider(providerName, taskType);
     try {
-      const response = await fn(primary);
-      return { response, providerUsed: preferredProvider, modelUsed: primaryModel };
+      const response = await fn(new GatewayProvider(apiKey, model));
+      return { response, providerUsed: providerName, modelUsed: model };
     } catch (err) {
-      console.error(`[orchestrator] ${preferredProvider} failed, trying fallback:`, err);
-    }
-  }
-
-  for (const fallbackName of getFallbackProviders(preferredProvider)) {
-    const fallbackModel = getModelForProvider(fallbackName, taskType);
-    const fallback = tryGetProvider(fallbackName, fallbackModel);
-    if (fallback) {
-      try {
-        const response = await fn(fallback);
-        return { response, providerUsed: fallbackName, modelUsed: fallbackModel };
-      } catch (err) {
-        console.error(`[orchestrator] Fallback ${fallbackName} also failed:`, err);
+      if (isAccountError(err)) {
+        console.error('[orchestrator] AI Gateway rejected the request:', err);
+        throw new Error('The AI service is unavailable right now. Please try again later.');
       }
+      console.error(`[orchestrator] ${model} failed for ${taskType}, trying the next model:`, err);
     }
   }
 
-  throw new Error(`No AI provider available for task: ${taskType}`);
+  throw new Error(`Every model failed for task: ${taskType}.`);
 }
 
 function formatFileContext(files?: Record<string, string>): string {

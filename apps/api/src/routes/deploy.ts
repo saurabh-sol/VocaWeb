@@ -13,7 +13,7 @@ import {
   resolvePublicDeployUrl,
   resolveStableVercelUrl,
 } from '../lib/deployer.js';
-import { requireAuthUser, getAuthUser } from '../lib/privy-auth.js';
+import { requireAuthUser, getAuthUser } from '../lib/auth.js';
 import {
   getProject,
   getProjectDeployments,

@@ -7,10 +7,9 @@ import {
   writeProjectFile,
 } from './project-manager.js';
 import { generateSiteImages, imagePathsForPrompt } from './image-generator.js';
-import { getOpenAiKey } from './ai-keys.js';
 import type { OrchestratorContext } from './orchestrator.js';
 import { tierToFramework } from './prompts.js';
-import type { ModelTier } from './token-gate.js';
+import type { ModelTier } from './model-tier.js';
 
 export interface VoiceActionRequest {
   tool: string;
@@ -83,7 +82,7 @@ async function runOrchestrateWithImages(
 ) {
   let preGeneratedAssets: Record<string, string> = {};
   try {
-    const imageB64 = await generateSiteImages(description, getOpenAiKey());
+    const imageB64 = await generateSiteImages(description);
     preGeneratedAssets = Object.fromEntries(
       imagePathsForPrompt(imageB64).map((p) => [p, 'generated']),
     );

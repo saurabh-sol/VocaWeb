@@ -9,7 +9,6 @@ import { billingRoutes } from './billing.js';
 import { conversationRoutes } from './conversations.js';
 import { contactRoutes } from './contact.js';
 import { integrationRoutes } from './integrations.js';
-import { tokenGateRoutes } from './token-gate.js';
 import { getCanvaMcpCimdDocument } from '../lib/mcp/canva-mcp-oauth.js';
 
 export async function registerRoutes(app: FastifyInstance) {
@@ -24,5 +23,4 @@ export async function registerRoutes(app: FastifyInstance) {
   await app.register(billingRoutes, { prefix: '/billing' });
   await app.register(contactRoutes, { prefix: '/contact' });
   await app.register(integrationRoutes, { prefix: '/integrations' });
-  await app.register(tokenGateRoutes, { prefix: '/token-gate' });
 }
