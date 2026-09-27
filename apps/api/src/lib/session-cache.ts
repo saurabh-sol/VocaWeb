@@ -1,10 +1,10 @@
-import { redis } from './redis.js';
+import { redis, redisConfigured } from './redis.js';
 import type { ChatMessageRecord, ChatSessionRecord } from '@theo/db';
 
 const SESSIONS_TTL = 300; // 5 min
 const MESSAGES_TTL = 600; // 10 min
 
-let redisAvailable = true;
+let redisAvailable = redisConfigured;
 
 redis.on('error', () => {
   redisAvailable = false;

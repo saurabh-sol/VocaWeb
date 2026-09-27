@@ -5,3 +5,4 @@ export * from './repositories/projects.js';
 export * from './repositories/conversations.js';
 export * from './repositories/waitlist.js';
 export * from './repositories/integrations.js';
+export * from './repositories/usage.js';

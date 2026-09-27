@@ -12,11 +12,11 @@ export interface UsageSnapshot {
   resetsAt: string;
 }
 
-/** Minimal counter storage. Keys expire on their own after a couple of days. */
+/** Counter storage, one counter per user per UTC day (`YYYY-MM-DD`). */
 export interface UsageStore {
-  increment(key: string): Promise<number>;
-  decrement(key: string): Promise<void>;
-  read(key: string): Promise<number>;
+  increment(userId: string, day: string): Promise<number>;
+  decrement(userId: string, day: string): Promise<void>;
+  read(userId: string, day: string): Promise<number>;
 }
 
 export class UsageLimitError extends Error {
@@ -30,7 +30,6 @@ export class UsageLimitError extends Error {
 }
 
 export const DEFAULT_DAILY_LIMIT = 10;
-export const USAGE_KEY_PREFIX = 'vocaweb:usage:';
 
 export function parseDailyLimit(raw: string | undefined): number {
   const parsed = Number.parseInt(raw ?? '', 10);
@@ -54,8 +53,6 @@ export interface UsageTrackerOptions {
 }
 
 export function createUsageTracker({ store, getLimit, now = () => new Date() }: UsageTrackerOptions) {
-  const keyFor = (userId: string) => `${USAGE_KEY_PREFIX}${userId}:${dayStamp(now())}`;
-
   const snapshot = (buildsToday: number): UsageSnapshot => ({
     plan: 'free',
     buildsToday,
@@ -65,7 +62,7 @@ export function createUsageTracker({ store, getLimit, now = () => new Date() }: 
 
   return {
     async getUsage(userId: string): Promise<UsageSnapshot> {
-      return snapshot(Math.min(await store.read(keyFor(userId)), getLimit()));
+      return snapshot(Math.min(await store.read(userId, dayStamp(now())), getLimit()));
     },
 
     /**
@@ -73,11 +70,12 @@ export function createUsageTracker({ store, getLimit, now = () => new Date() }: 
      * Call the returned function if the work fails, so a failed build costs nothing.
      */
     async reserveBuild(userId: string): Promise<() => Promise<void>> {
-      const key = keyFor(userId);
-      const count = await store.increment(key);
+      // The day is fixed when the build starts, so a refund after midnight hits the right row.
+      const day = dayStamp(now());
+      const count = await store.increment(userId, day);
 
       if (count > getLimit()) {
-        await store.decrement(key);
+        await store.decrement(userId, day);
         throw new UsageLimitError(snapshot(getLimit()));
       }
 
@@ -85,26 +83,56 @@ export function createUsageTracker({ store, getLimit, now = () => new Date() }: 
       return async () => {
         if (refunded) return;
         refunded = true;
-        await store.decrement(key);
+        await store.decrement(userId, day);
       };
     },
   };
 }
 
-/** In-process counters. Used in tests and while Redis is unreachable. */
+/** In-process counters. Used in tests and while the database is unreachable. */
 export function createMemoryStore(): UsageStore {
   const counts = new Map<string, number>();
+  const keyOf = (userId: string, day: string) => `${userId}:${day}`;
   return {
-    async increment(key) {
+    async increment(userId, day) {
+      const key = keyOf(userId, day);
       const next = (counts.get(key) ?? 0) + 1;
       counts.set(key, next);
       return next;
     },
-    async decrement(key) {
+    async decrement(userId, day) {
+      const key = keyOf(userId, day);
       counts.set(key, Math.max(0, (counts.get(key) ?? 0) - 1));
     },
-    async read(key) {
-      return counts.get(key) ?? 0;
+    async read(userId, day) {
+      return counts.get(keyOf(userId, day)) ?? 0;
+    },
+  };
+}
+
+/** Wraps a store so that a failure falls through to a second one instead of lifting the limit. */
+export function withFallback(primary: UsageStore, fallback: UsageStore): UsageStore {
+  return {
+    async increment(userId, day) {
+      try {
+        return await primary.increment(userId, day);
+      } catch {
+        return fallback.increment(userId, day);
+      }
+    },
+    async decrement(userId, day) {
+      try {
+        await primary.decrement(userId, day);
+      } catch {
+        await fallback.decrement(userId, day);
+      }
+    },
+    async read(userId, day) {
+      try {
+        return await primary.read(userId, day);
+      } catch {
+        return fallback.read(userId, day);
+      }
     },
   };
 }

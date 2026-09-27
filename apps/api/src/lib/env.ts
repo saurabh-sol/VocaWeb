@@ -4,7 +4,8 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(3001),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  // Optional. Only the conversation cache uses Redis.
+  REDIS_URL: z.string().optional(),
 
   // Sign-in (Clerk). CLERK_JWT_KEY lets tokens be verified without a network call.
   CLERK_SECRET_KEY: z.string().min(1, 'CLERK_SECRET_KEY is required'),
